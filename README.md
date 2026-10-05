@@ -10,7 +10,7 @@ TheEssem's feature branches**: the three feature branches are applied directly
 on current glitch-soc, followed by the fork's own customisations.
 
 - Base commit: `.base-commit` (`b3877d5b245c6fa65f1a7639fa5593c6b6ade8fc`, glitch-soc `main`, 2026-10-05)
-- Result: 5 patches, 461 files changed, +54392 / -299 vs the base commit
+- Result: 5 patches, 461 files changed, +54400 / -300 vs the base commit
 - Each patch applies on top of the previous one; together they reproduce the
   fork's tree (see [Verification](#verification)).
 
