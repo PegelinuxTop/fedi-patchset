@@ -1,4 +1,4 @@
-From 8aa0e5ae42a78a4692f7e798ba4196d08a562a01 Mon Sep 17 00:00:00 2001
+From 78112cd6fe47627bc4d73efd551eed1da112d537 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:18:58 +0700
 Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
@@ -14,7 +14,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  .../api/v1/custom_emojis_controller.rb        |    1 +
  .../components/autosuggest_textarea.jsx       |    4 +-
  .../glitch/components/icon_button.tsx         |    2 +-
- .../components/status/legacy/content.jsx      |    8 +-
+ .../components/status/legacy/content.jsx      |   10 +-
  .../glitch/components/status_reactions.tsx    |  131 +
  .../glitch/components/timeline_hint.tsx       |    2 +-
  .../account_gallery/components/media_item.tsx |    2 +-
@@ -29,7 +29,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  .../components/notification_admin_report.tsx  |    2 +-
  .../glitch/features/status/legacy.jsx         |   25 +-
  .../ui/components/compare_history_modal.jsx   |    4 +-
- .../features/ui/components/sign_in_banner.jsx |  106 +
+ .../features/ui/components/sign_in_banner.jsx |  107 +
  .../features/ui/util/identity_consumer.jsx    |   16 +
  app/javascript/flavours/glitch/locales/de.js  |   12 +
  app/javascript/flavours/glitch/locales/fr.js  |   12 +
@@ -278,7 +278,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  streaming/database.js                         |   62 +-
  streaming/redis.js                            |   16 +-
  stylelint.config.js                           |   14 +
- 273 files changed, 49715 insertions(+), 111 deletions(-)
+ 273 files changed, 49717 insertions(+), 112 deletions(-)
  create mode 100644 .stylelintignore
  create mode 100644 app/javascript/flavours/glitch/components/status_reactions.tsx
  create mode 100644 app/javascript/flavours/glitch/features/explore/components/author_link.jsx
@@ -676,9 +676,18 @@ index a3768feda4..89e334c8a7 100644
          </a>
        );
 diff --git a/app/javascript/flavours/glitch/components/status/legacy/content.jsx b/app/javascript/flavours/glitch/components/status/legacy/content.jsx
-index f1c7ec00e6..8efc59111f 100644
+index f1c7ec00e6..b312b5b336 100644
 --- a/app/javascript/flavours/glitch/components/status/legacy/content.jsx
 +++ b/app/javascript/flavours/glitch/components/status/legacy/content.jsx
+@@ -24,7 +24,7 @@ const MAX_HEIGHT = 706; // 22px * 32 (+ 2px padding at the top)
+ 
+ /**
+  *
+- * @param {any} status
++ * @param {import('immutable').Map<string, unknown>} status
+  * @returns {string}
+  */
+ export function getStatusContent(status) {
 @@ -83,6 +83,7 @@ class StatusContent extends PureComponent {
      onCollapsedToggle: PropTypes.func,
      languages: ImmutablePropTypes.map,
@@ -1185,10 +1194,10 @@ index 3725412d9c..41380fb25f 100644
    language: state.getIn(['statuses', statusId, 'language']),
 diff --git a/app/javascript/flavours/glitch/features/ui/components/sign_in_banner.jsx b/app/javascript/flavours/glitch/features/ui/components/sign_in_banner.jsx
 new file mode 100644
-index 0000000000..01ec91c032
+index 0000000000..745ed2ae06
 --- /dev/null
 +++ b/app/javascript/flavours/glitch/features/ui/components/sign_in_banner.jsx
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,107 @@
 +import { useCallback } from 'react';
 +
 +import { FormattedMessage } from 'react-intl';
@@ -1257,6 +1266,7 @@ index 0000000000..01ec91c032
 +    signupButton = (
 +      <button
 +        className='button button--block'
++        type='button'
 +        onClick={openClosedRegistrationsModal}
 +      >
 +        <FormattedMessage

@@ -1,4 +1,4 @@
-From 43e54d4f58699c767f7a1c52693168492002d5e0 Mon Sep 17 00:00:00 2001
+From ae41e8aafd247f09db26ead61f1c66d838808852 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:28:10 +0700
 Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
@@ -10,8 +10,8 @@ Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
  .../features/ui/components/link_footer.tsx        |  5 +++++
  app/javascript/mastodon/locales/en.json           |  1 +
  config/locales/ja.yml                             |  6 ++++++
- eslint.config.mjs                                 |  3 ++-
- 6 files changed, 34 insertions(+), 1 deletion(-)
+ eslint.config.mjs                                 | 10 +++++++++-
+ 6 files changed, 41 insertions(+), 1 deletion(-)
 
 diff --git a/Dockerfile b/Dockerfile
 index 90c1be362f..2285467767 100644
@@ -108,7 +108,7 @@ index 0f661e7ae7..36af933863 100644
          authorized_fetch: 連合サーバーによる署名なしでの情報取得を拒否する
          authorized_fetch_overridden_hint: この設定は環境変数で指定されているため、ここでは変更できません。
 diff --git a/eslint.config.mjs b/eslint.config.mjs
-index 67f7da386d..0a8ffcfb60 100644
+index 67f7da386d..30bfdd84d5 100644
 --- a/eslint.config.mjs
 +++ b/eslint.config.mjs
 @@ -75,7 +75,7 @@ export const baseConfig = [
@@ -124,7 +124,19 @@ index 67f7da386d..0a8ffcfb60 100644
    formatjs.configs.strict,
    storybook.configs['flat/recommended'],
    {
-+    files: ['**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx'],
++    files: ['**/*.js', '**/*.jsx', '**/*.mjs', '**/*.ts', '**/*.tsx'],
      languageOptions: {
        globals: {
          ...globals.browser,
+@@ -399,4 +400,11 @@ export default tseslint.config([
+       '@typescript-eslint/prefer-nullish-coalescing': 'off',
+     },
+   },
++  {
++    // The glitch flavour overlays a few locales by extending the vanilla ones.
++    files: ['app/javascript/flavours/glitch/locales/*.js'],
++    rules: {
++      'import/no-restricted-paths': 'off',
++    },
++  },
+ ]);

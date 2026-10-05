@@ -56,6 +56,11 @@ if [[ ! -f "$REPO_DIR/.base-commit" ]]; then
   exit 1
 fi
 
+if [[ "$USE_STG" == "1" ]] && ! command -v stg >/dev/null 2>&1; then
+  echo "setup.sh: --stg requested but 'stg' is not installed" >&2
+  exit 1
+fi
+
 if [[ -e "$DEST/.git" ]]; then
   echo "==> Using existing checkout at $DEST"
   if [[ "$FORCE" == "1" ]]; then
@@ -88,10 +93,6 @@ echo "==> Checking out $BASE_COMMIT as branch $BRANCH"
 git -C "$DEST" checkout -B "$BRANCH" "$BASE_COMMIT"
 
 if [[ "$USE_STG" == "1" ]]; then
-  if ! command -v stg >/dev/null 2>&1; then
-    echo "setup.sh: --stg requested but 'stg' is not installed" >&2
-    exit 1
-  fi
   echo "==> Initialising Stacked Git stack"
   if git -C "$DEST" rev-parse --verify refs/stacks/"$BRANCH" >/dev/null 2>&1; then
     echo "==> Dropping the existing stack metadata for branch $BRANCH"

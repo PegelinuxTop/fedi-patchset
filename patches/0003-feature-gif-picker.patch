@@ -1,4 +1,4 @@
-From f607db4b1e780b2d4d3ca68dd770f13ef11c8a22 Mon Sep 17 00:00:00 2001
+From d90351a672ff5de0ef9e7f17e4db224552c3f8cf Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:17:31 +0700
 Subject: [PATCH 3/5] feature/gif-picker: Tenor/Klipy GIF search (Essem,
@@ -13,7 +13,7 @@ Subject: [PATCH 3/5] feature/gif-picker: Tenor/Klipy GIF search (Essem,
  .../compose/components/upload_button.jsx      |  24 +-
  .../containers/upload_button_container.js     |  20 +-
  .../gif_modal/components/gif_item.tsx         |  42 ++++
- .../glitch/features/gif_modal/index.tsx       | 215 ++++++++++++++++++
+ .../glitch/features/gif_modal/index.tsx       | 214 ++++++++++++++++++
  .../features/ui/components/modal_root.jsx     |   4 +-
  .../flavours/glitch/locales/en.json           |  10 +-
  app/javascript/flavours/glitch/models/gif.ts  |   6 +
@@ -36,7 +36,7 @@ Subject: [PATCH 3/5] feature/gif-picker: Tenor/Klipy GIF search (Essem,
  public/klipy-dark.svg                         |  64 ++++++
  public/klipy-light.svg                        |  65 ++++++
  public/tenor.svg                              |  22 ++
- 31 files changed, 892 insertions(+), 21 deletions(-)
+ 31 files changed, 891 insertions(+), 21 deletions(-)
  create mode 100644 app/controllers/api/v1/gifs_controller.rb
  create mode 100644 app/javascript/flavours/glitch/api_types/gif.ts
  create mode 100644 app/javascript/flavours/glitch/features/gif_modal/components/gif_item.tsx
@@ -392,10 +392,10 @@ index 0000000000..6ecdb8e756
 +};
 diff --git a/app/javascript/flavours/glitch/features/gif_modal/index.tsx b/app/javascript/flavours/glitch/features/gif_modal/index.tsx
 new file mode 100644
-index 0000000000..dd2780bc08
+index 0000000000..141c1826f7
 --- /dev/null
 +++ b/app/javascript/flavours/glitch/features/gif_modal/index.tsx
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,214 @@
 +import { useCallback, useState, useRef, useEffect } from 'react';
 +
 +import { defineMessages, useIntl } from 'react-intl';
@@ -570,7 +570,6 @@ index 0000000000..dd2780bc08
 +            aria-label={intl.formatMessage(messages.search)}
 +            value={value}
 +            disabled={disabled}
-+            // eslint-disable-next-line jsx-a11y/no-autofocus
 +            autoFocus
 +            onChange={handleChange}
 +            onKeyDown={handleKeyDown}
