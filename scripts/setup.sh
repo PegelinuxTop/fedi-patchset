@@ -93,13 +93,15 @@ if [[ "$USE_STG" == "1" ]]; then
     exit 1
   fi
   echo "==> Initialising Stacked Git stack"
-  if ! git -C "$DEST" rev-parse --verify refs/stacks/"$BRANCH" >/dev/null 2>&1; then
-    git -C "$DEST" stg init
+  if git -C "$DEST" rev-parse --verify refs/stacks/"$BRANCH" >/dev/null 2>&1; then
+    echo "==> Dropping the existing stack metadata for branch $BRANCH"
+    git -C "$DEST" update-ref -d refs/stacks/"$BRANCH"
   fi
+  (cd "$DEST" && stg init)
   while read -r patch; do
     [[ -z "$patch" || "$patch" == \#* ]] && continue
     echo "==> stg import $patch"
-    git -C "$DEST" stg import "$REPO_DIR/patches/$patch"
+    (cd "$DEST" && stg import --name "${patch%.patch}" "$REPO_DIR/patches/$patch")
   done < "$REPO_DIR/series"
 else
   echo "==> Applying patches with git am"
