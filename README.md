@@ -126,24 +126,28 @@ in the tree comes from `dev` or from glitch-soc):
 
 ## Verification
 
-Run against the tree produced by the series:
+Performed against the tree produced by the series (`scripts/setup.sh`, both the
+`git am` and the `--stg` paths, on a fresh clone):
 
-- `scripts/lint-patches.sh` — series/patches agree, no conflict markers, no
-  modified migrations, unique migration timestamps, all 5 patches apply cleanly
-  on the base commit.
-- Patches applied with `git am` to a fresh glitch-soc checkout at the base
-  commit produce the tree this README describes: the fork's `dev` tree merged
-  onto the base commit, with the deviations listed above.
-- Every file that differs from the base commit is a file the fork touches: for
-  all 464 files changed between the fork's last merge point and `dev`, the
-  patched tree differs from that pre-fork baseline (no customisation dropped),
-  and no file outside that set was changed.
-- JavaScript checks pass on the patched tree:
-  `yarn format:check`, `yarn typecheck` (`tsc --noEmit`), `yarn lint:css`
-  (`stylelint`) and `eslint` over the changed files (0 errors).
+- `scripts/lint-patches.sh` — series/patches agree, every patch parses as a mail
+  patch, no conflict markers, no existing migration modified, migration
+  timestamps unique and free of collisions with the base commit, and all five
+  patches apply cleanly to the base commit in a throwaway worktree.
+- Nothing outside the fork's own changes was touched: every file that differs
+  from the base commit is a file the fork modifies, and for all 464 files that
+  differ between the fork's last merge point and `dev`, the patched tree still
+  differs from that pre-fork baseline (no customisation dropped).
+- JavaScript: `yarn format:check`, `yarn typecheck` (`tsc --noEmit`),
+  `yarn lint:css` (`stylelint`), `eslint` over the changed files, and
+  `yarn test:js` (vitest, 48 test files / 8089 tests) all pass.
+- Ruby: all 124 changed `.rb`/`.rake` files parse cleanly with Prism
+  (`@ruby/prism`).
+- Data files: all 34 changed `.json`/`.yml` files parse cleanly.
 
-Not verified here, because the environment has no Ruby toolchain:
-`bin/rubocop`, `bundle exec rails db:migrate`/schema comparison and the RSpec
-suite. `db/schema.rb` in the tree is the merge of the fork's schema with
-glitch-soc's current schema (including the fork's `bubble_domains`,
-`status_reactions` tables and `status_stats.reactions_count`).
+Not verified here, because the environment has no Ruby toolchain: `bin/rubocop`,
+the `bin/i18n-tasks` checks, `bundle exec rails db:migrate` with a schema
+comparison, and the RSpec suite. `db/schema.rb` in the tree is the merge of the
+fork's schema with glitch-soc's current schema (including the fork's
+`bubble_domains` and `status_reactions` tables and `status_stats.reactions_count`).
+Since it cannot be regenerated without Ruby, run `bin/rails db:migrate` once in a
+real environment and commit the result if it differs.
