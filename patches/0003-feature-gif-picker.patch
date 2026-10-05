@@ -1,0 +1,1507 @@
+From f607db4b1e780b2d4d3ca68dd770f13ef11c8a22 Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Tue, 6 Oct 2026 01:17:31 +0700
+Subject: [PATCH 3/5] feature/gif-picker: Tenor/Klipy GIF search (Essem,
+ rebased onto latest glitch-soc)
+
+---
+ .env.production.sample                        |   3 +
+ app/controllers/api/v1/gifs_controller.rb     |  26 +++
+ .../flavours/glitch/actions/compose.js        |  53 ++++-
+ .../flavours/glitch/api_types/gif.ts          |   5 +
+ .../flavours/glitch/api_types/instance.ts     |   5 +
+ .../compose/components/upload_button.jsx      |  24 +-
+ .../containers/upload_button_container.js     |  20 +-
+ .../gif_modal/components/gif_item.tsx         |  42 ++++
+ .../glitch/features/gif_modal/index.tsx       | 215 ++++++++++++++++++
+ .../features/ui/components/modal_root.jsx     |   4 +-
+ .../flavours/glitch/locales/en.json           |  10 +-
+ app/javascript/flavours/glitch/models/gif.ts  |   6 +
+ .../flavours/glitch/reducers/compose.js       |  32 ++-
+ .../glitch/styles/mastodon/components.scss    |  81 ++++++-
+ .../features/ui/components/modal_root.jsx     |   2 +-
+ .../material-icons/400-24px/gif_box.svg       |   1 +
+ app/lib/content_security_policy.rb            |  10 +-
+ app/lib/gif_service.rb                        |  38 ++++
+ app/lib/gif_service/klipy.rb                  |  50 ++++
+ app/lib/gif_service/tenor.rb                  |  50 ++++
+ app/models/gif_results.rb                     |   9 +
+ .../rest/gif_results_serializer.rb            |  11 +
+ app/serializers/rest/instance_serializer.rb   |   6 +
+ app/services/search_gifs_service.rb           |  25 ++
+ config/application.rb                         |   2 +
+ config/gifs.yml                               |   5 +
+ config/locales-glitch/en.yml                  |  26 ++-
+ config/routes/api.rb                          |   1 +
+ public/klipy-dark.svg                         |  64 ++++++
+ public/klipy-light.svg                        |  65 ++++++
+ public/tenor.svg                              |  22 ++
+ 31 files changed, 892 insertions(+), 21 deletions(-)
+ create mode 100644 app/controllers/api/v1/gifs_controller.rb
+ create mode 100644 app/javascript/flavours/glitch/api_types/gif.ts
+ create mode 100644 app/javascript/flavours/glitch/features/gif_modal/components/gif_item.tsx
+ create mode 100644 app/javascript/flavours/glitch/features/gif_modal/index.tsx
+ create mode 100644 app/javascript/flavours/glitch/models/gif.ts
+ create mode 100644 app/javascript/material-icons/400-24px/gif_box.svg
+ create mode 100644 app/lib/gif_service.rb
+ create mode 100644 app/lib/gif_service/klipy.rb
+ create mode 100644 app/lib/gif_service/tenor.rb
+ create mode 100644 app/models/gif_results.rb
+ create mode 100644 app/serializers/rest/gif_results_serializer.rb
+ create mode 100644 app/services/search_gifs_service.rb
+ create mode 100644 config/gifs.yml
+ create mode 100644 public/klipy-dark.svg
+ create mode 100644 public/klipy-light.svg
+ create mode 100644 public/tenor.svg
+
+diff --git a/.env.production.sample b/.env.production.sample
+index 3a01c04c90..2a6b0568d7 100644
+--- a/.env.production.sample
++++ b/.env.production.sample
+@@ -311,6 +311,9 @@ MAX_REACTIONS=1
+ # HCAPTCHA_SECRET_KEY=
+ # HCAPTCHA_SITE_KEY=
+ 
++# Optional Klipy GIF picker support
++# KLIPY_API_KEY=
++
+ # Optional list of hosts that are allowed to serve media for your instance
+ # EXTRA_MEDIA_HOSTS=https://data.example1.com,https://data.example2.com
+ 
+diff --git a/app/controllers/api/v1/gifs_controller.rb b/app/controllers/api/v1/gifs_controller.rb
+new file mode 100644
+index 0000000000..3b19ac73f6
+--- /dev/null
++++ b/app/controllers/api/v1/gifs_controller.rb
+@@ -0,0 +1,26 @@
++# frozen_string_literal: true
++
++class Api::V1::GifsController < Api::BaseController
++  before_action -> { doorkeeper_authorize! :write, :'write:media' }
++  before_action :require_user!
++  before_action :set_gif_results
++
++  rescue_from GifService::NotConfiguredError, with: :not_found
++  rescue_from GifService::UnexpectedResponseError, with: :service_unavailable
++
++  rescue_from GifService::TooManyRequestsError do
++    render json: { error: I18n.t('gif.errors.too_many_requests') }, status: 503
++  end
++
++  def index
++    render json: @gif_results, serializer: REST::GifResultsSerializer
++  end
++
++  private
++
++  def set_gif_results
++    return bad_request if params[:q].blank?
++
++    @gif_results = SearchGifsService.new.call(params[:q])
++  end
++end
+diff --git a/app/javascript/flavours/glitch/actions/compose.js b/app/javascript/flavours/glitch/actions/compose.js
+index 229895b9ce..e7a5a508a4 100644
+--- a/app/javascript/flavours/glitch/actions/compose.js
++++ b/app/javascript/flavours/glitch/actions/compose.js
+@@ -71,6 +71,11 @@ export const COMPOSE_LANGUAGE_CHANGE     = 'COMPOSE_LANGUAGE_CHANGE';
+ export const COMPOSE_EMOJI_INSERT = 'COMPOSE_EMOJI_INSERT';
+ 
+ export const COMPOSE_DOODLE_SET        = 'COMPOSE_DOODLE_SET';
++export const COMPOSE_GIF_RESET = 'COMPOSE_GIF_RESET';
++
++export const COMPOSE_GIF_SEARCH_REQUEST = 'COMPOSE_GIF_SEARCH_REQUEST';
++export const COMPOSE_GIF_SEARCH_SUCCESS = 'COMPOSE_GIF_SEARCH_SUCCESS';
++export const COMPOSE_GIF_SEARCH_FAIL    = 'COMPOSE_GIF_SEARCH_FAIL';
+ 
+ export const COMPOSE_POLL_ADD             = 'COMPOSE_POLL_ADD';
+ export const COMPOSE_POLL_REMOVE          = 'COMPOSE_POLL_REMOVE';
+@@ -90,7 +95,6 @@ export const COMPOSE_FOCUS = 'COMPOSE_FOCUS';
+ 
+ const messages = defineMessages({
+   uploadErrorLimit: { id: 'upload_error.limit', defaultMessage: 'File upload limit exceeded.' },
+-  uploadErrorPoll:  { id: 'upload_error.poll', defaultMessage: 'File upload not allowed with polls.' },
+   uploadQuote: { id: 'upload_error.quote', defaultMessage: 'File upload not allowed with quotes.' },
+   open: { id: 'compose.published.open', defaultMessage: 'Open' },
+   published: { id: 'compose.published.body', defaultMessage: 'Post published.' },
+@@ -128,12 +132,14 @@ export function changeCompose(text) {
+   };
+ }
+ 
+-export function replyCompose(status) {
++export function replyCompose(status, statusRebloggedBy) {
+   return (dispatch, getState) => {
+     const prependCWRe = getState().getIn(['local_settings', 'prepend_cw_re']);
++    const mentionReblogger = getState().getIn(['local_settings', 'mention_reblogger']);
+     dispatch({
+       type: COMPOSE_REPLY,
+       status: status,
++      statusRebloggedBy: mentionReblogger ? statusRebloggedBy : undefined,
+       prependCWRe: prependCWRe,
+     });
+ 
+@@ -378,7 +384,47 @@ export function doodleSet(options) {
+   };
+ }
+ 
+-export function uploadCompose(files) {
++export function resetGifs() {
++  return {
++    type: COMPOSE_GIF_RESET,
++  };
++}
++
++export const gifSearch = query => (dispatch) => {
++  dispatch(gifSearchRequest(query));
++
++  api().get(`/api/v1/gifs`, { params: { q: query } }).then(response => {
++    dispatch(gifSearchSuccess(query, response.data));
++  }).catch(error => {
++    dispatch(gifSearchFail(query, error));
++  });
++};
++
++export function gifSearchRequest(query) {
++  return {
++    type: COMPOSE_GIF_SEARCH_REQUEST,
++    query,
++  };
++}
++
++export function gifSearchSuccess(query, data) {
++  return {
++    type: COMPOSE_GIF_SEARCH_SUCCESS,
++    query,
++    results: data.results,
++    provider: data.provider,
++  };
++}
++
++export function gifSearchFail(query, error) {
++  return {
++    type: COMPOSE_GIF_SEARCH_FAIL,
++    query,
++    error,
++  };
++}
++
++export function uploadCompose(files, alt = '') {
+   return function (dispatch, getState) {
+     // Exit if there's a quote.
+     if (getState().compose.get('quoted_status_id')) {
+@@ -413,6 +459,7 @@ export function uploadCompose(files) {
+ 
+       const data = new FormData();
+       data.append('file', file);
++      data.append('description', alt);
+ 
+       api().post('/api/v2/media', data, {
+         onUploadProgress: function({ loaded }){
+diff --git a/app/javascript/flavours/glitch/api_types/gif.ts b/app/javascript/flavours/glitch/api_types/gif.ts
+new file mode 100644
+index 0000000000..0f5daa45b7
+--- /dev/null
++++ b/app/javascript/flavours/glitch/api_types/gif.ts
+@@ -0,0 +1,5 @@
++export interface ApiGifResultJSON {
++  id: string;
++  description: string | null;
++  url: string;
++}
+diff --git a/app/javascript/flavours/glitch/api_types/instance.ts b/app/javascript/flavours/glitch/api_types/instance.ts
+index 46bdce3f41..1606901908 100644
+--- a/app/javascript/flavours/glitch/api_types/instance.ts
++++ b/app/javascript/flavours/glitch/api_types/instance.ts
+@@ -143,5 +143,10 @@ export interface ApiInstanceJSON {
+     };
+ 
+     limited_federation: boolean;
++
++    gif_search: {
++      enabled: boolean;
++      provider: string;
++    };
+   };
+ }
+diff --git a/app/javascript/flavours/glitch/features/compose/components/upload_button.jsx b/app/javascript/flavours/glitch/features/compose/components/upload_button.jsx
+index 4f17a67d3d..0ea4c3ee41 100644
+--- a/app/javascript/flavours/glitch/features/compose/components/upload_button.jsx
++++ b/app/javascript/flavours/glitch/features/compose/components/upload_button.jsx
+@@ -8,6 +8,7 @@ import { connect } from 'react-redux';
+ 
+ import PhotoLibraryIcon from '@/material-icons/400-20px/photo_library.svg?react';
+ import BrushIcon from '@/material-icons/400-24px/brush.svg?react';
++import GifBoxIcon from '@/material-icons/400-24px/gif_box.svg?react';
+ import UploadFileIcon from '@/material-icons/400-24px/upload_file.svg?react';
+ 
+ import { injectIntl } from '@/flavours/glitch/components/intl';
+@@ -17,11 +18,13 @@ import { DropdownIconButton } from './dropdown_icon_button';
+ const messages = defineMessages({
+   upload: { id: 'upload_button.label', defaultMessage: 'Add images, a video or an audio file' },
+   doodle: { id: 'compose.attach.doodle', defaultMessage: 'Draw something' },
++  gif:    { id: 'compose.attach.gif', defaultMessage: 'Upload GIF' },
+ });
+ 
+ const makeMapStateToProps = () => {
+   const mapStateToProps = state => ({
+     acceptContentTypes: state.getIn(['media_attachments', 'accept_content_types']),
++    supportsGif: state.server.server.item?.configuration.gif_search.enabled,
+   });
+ 
+   return mapStateToProps;
+@@ -33,9 +36,13 @@ class UploadButton extends ImmutablePureComponent {
+     disabled: PropTypes.bool,
+     onSelectFile: PropTypes.func.isRequired,
+     onDoodleOpen: PropTypes.func.isRequired,
++    onEmbedGif: PropTypes.func.isRequired,
++    onModalClose: PropTypes.func.isRequired,
++    onModalOpen: PropTypes.func.isRequired,
+     style: PropTypes.object,
+     resetFileKey: PropTypes.number,
+     acceptContentTypes: ImmutablePropTypes.listOf(PropTypes.string).isRequired,
++    supportsGif: PropTypes.bool.isRequired,
+     intl: PropTypes.object.isRequired,
+   };
+ 
+@@ -48,8 +55,10 @@ class UploadButton extends ImmutablePureComponent {
+   handleSelect = (value) => {
+     if (value === 'upload') {
+       this.fileElement.click();
+-    } else {
++    } else if (value === 'doodle') {
+       this.props.onDoodleOpen();
++    } else if (value === 'gif') {
++      this.props.onEmbedGif();
+     }
+   };
+ 
+@@ -58,7 +67,7 @@ class UploadButton extends ImmutablePureComponent {
+   };
+ 
+   render () {
+-    const { intl, resetFileKey, disabled, acceptContentTypes } = this.props;
++    const { intl, resetFileKey, disabled, acceptContentTypes, supportsGif } = this.props;
+ 
+     const message = intl.formatMessage(messages.upload);
+ 
+@@ -74,9 +83,18 @@ class UploadButton extends ImmutablePureComponent {
+         iconComponent: BrushIcon,
+         value: 'doodle',
+         text: intl.formatMessage(messages.doodle),
+-      },
++      }
+     ];
+ 
++    if (supportsGif) {
++      options.push({
++        icon: 'gif-box',
++        iconComponent: GifBoxIcon,
++        value: 'gif',
++        text: intl.formatMessage(messages.gif),
++      });
++    }
++
+     return (
+       <div className='compose-form__upload-button'>
+         <DropdownIconButton
+diff --git a/app/javascript/flavours/glitch/features/compose/containers/upload_button_container.js b/app/javascript/flavours/glitch/features/compose/containers/upload_button_container.js
+index 67f14dab3a..572cf5c8f5 100644
+--- a/app/javascript/flavours/glitch/features/compose/containers/upload_button_container.js
++++ b/app/javascript/flavours/glitch/features/compose/containers/upload_button_container.js
+@@ -1,7 +1,7 @@
+ import { connect } from 'react-redux';
+ 
+ import { uploadCompose } from '../../../actions/compose';
+-import { openModal } from '../../../actions/modal';
++import { openModal, closeModal } from '../../../actions/modal';
+ import UploadButton from '../components/upload_button';
+ 
+ const mapStateToProps = state => {
+@@ -31,6 +31,24 @@ const mapDispatchToProps = dispatch => ({
+       modalProps: { noEsc: true, noClose: true },
+     }));
+   },
++
++  onEmbedGif() {
++    dispatch(openModal({
++      modalType: 'GIF',
++      modalProps: { noEsc: true },
++    }));
++  },
++
++  onModalClose() {
++    dispatch(closeModal({
++      modalType: undefined,
++      ignoreFocus: false,
++    }));
++  },
++
++  onModalOpen(props) {
++    dispatch(openModal({ modalType: 'ACTIONS', modalProps: props }));
++  },
+ });
+ 
+ export default connect(mapStateToProps, mapDispatchToProps)(UploadButton);
+diff --git a/app/javascript/flavours/glitch/features/gif_modal/components/gif_item.tsx b/app/javascript/flavours/glitch/features/gif_modal/components/gif_item.tsx
+new file mode 100644
+index 0000000000..6ecdb8e756
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/gif_modal/components/gif_item.tsx
+@@ -0,0 +1,42 @@
++import { useCallback } from 'react';
++
++import type { GifResult } from 'flavours/glitch/models/gif';
++
++export const GifItem: React.FC<{
++  gif: GifResult;
++  onSelect: (arg0: GifResult) => void;
++  disabled: boolean;
++}> = ({ gif, onSelect, disabled }) => {
++  const handleClick = useCallback(
++    (e: React.MouseEvent<HTMLButtonElement>) => {
++      if (e.button === 0 && !(e.ctrlKey || e.metaKey)) {
++        e.preventDefault();
++        onSelect(gif);
++      }
++    },
++    [gif, onSelect],
++  );
++
++  return (
++    <div className='media-gallery__item media-gallery__item--square'>
++      <button
++        className='media-gallery__item-thumbnail'
++        onClick={handleClick}
++        disabled={disabled}
++        type='button'
++      >
++        <div className='media-gallery__gifv'>
++          <video
++            className='media-gallery__item-gifv-thumbnail'
++            aria-label={gif.description ?? undefined}
++            src={gif.url}
++            autoPlay
++            playsInline
++            loop
++            muted
++          />
++        </div>
++      </button>
++    </div>
++  );
++};
+diff --git a/app/javascript/flavours/glitch/features/gif_modal/index.tsx b/app/javascript/flavours/glitch/features/gif_modal/index.tsx
+new file mode 100644
+index 0000000000..dd2780bc08
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/gif_modal/index.tsx
+@@ -0,0 +1,215 @@
++import { useCallback, useState, useRef, useEffect } from 'react';
++
++import { defineMessages, useIntl } from 'react-intl';
++
++import type {
++  Map as ImmutableMap,
++  OrderedSet as ImmutableOrderedSet,
++} from 'immutable';
++
++import CancelIcon from '@/material-icons/400-24px/cancel-fill.svg?react';
++import CloseIcon from '@/material-icons/400-24px/close.svg?react';
++import SearchIcon from '@/material-icons/400-24px/search.svg?react';
++import { showAlertForError } from 'flavours/glitch/actions/alerts';
++import {
++  gifSearch,
++  resetGifs,
++  uploadCompose,
++} from 'flavours/glitch/actions/compose';
++import { CircularProgress } from 'flavours/glitch/components/circular_progress';
++import { Icon } from 'flavours/glitch/components/icon';
++import { IconButton } from 'flavours/glitch/components/icon_button';
++import { GifItem } from 'flavours/glitch/features/gif_modal/components/gif_item';
++import { useTimeout } from 'flavours/glitch/hooks/useTimeout';
++import type { GifResult } from 'flavours/glitch/models/gif';
++import { useAppDispatch, useAppSelector } from 'flavours/glitch/store';
++import { isDarkMode } from 'flavours/glitch/utils/theme';
++
++const messages = defineMessages({
++  search: { id: 'gif_search.search', defaultMessage: 'Search for GIFs' },
++  error: {
++    id: 'gif_search.error',
++    defaultMessage: 'Oops! Something went wrong. Please, try again.',
++  },
++  loading: { id: 'gif_search.loading', defaultMessage: 'Loading...' },
++  nomatches: {
++    id: 'gif_search.nomatches',
++    defaultMessage: 'No matches found.',
++  },
++  close: { id: 'settings.close', defaultMessage: 'Close' },
++  clear: { id: 'emoji_button.clear', defaultMessage: 'Clear' },
++});
++
++const unfocus = () => {
++  document.querySelector('.ui')?.parentElement?.focus();
++};
++
++export const GIFModal: React.FC<{
++  onClose: () => void;
++}> = ({ onClose }) => {
++  const intl = useIntl();
++  const dispatch = useAppDispatch();
++  const searchInputRef = useRef<HTMLInputElement>(null);
++  const gifs = useAppSelector(
++    (state) => state.compose.get('gifs') as ImmutableMap<string, unknown>,
++  );
++  const provider = useAppSelector(
++    (state) => state.server.server.item?.configuration.gif_search.provider,
++  );
++  const results = gifs.get('items') as ImmutableOrderedSet<GifResult>;
++  const isLoading = gifs.get('isLoading') as boolean;
++  const [value, setValue] = useState('');
++  const [setSendTimeout, cancelSendTimeout] = useTimeout();
++  const [disabled, setDisabled] = useState(false);
++
++  useEffect(() => {
++    cancelSendTimeout();
++    void dispatch(resetGifs());
++    // eslint-disable-next-line react-hooks/exhaustive-deps -- Adding sendTimeout as suggested would result in this being called every time it changes
++  }, [dispatch]);
++
++  const [prevResults, setPrevResults] = useState(results);
++  if (results !== prevResults) {
++    setPrevResults(results);
++    if (!isLoading) setDisabled(false);
++  }
++
++  const handleChange = useCallback(
++    ({ target: { value } }: React.ChangeEvent<HTMLInputElement>) => {
++      setValue(value);
++
++      if (value.length > 0) {
++        cancelSendTimeout();
++        setSendTimeout(() => {
++          dispatch(gifSearch(value));
++        }, 500);
++      } else {
++        cancelSendTimeout();
++      }
++    },
++    [dispatch, setSendTimeout, cancelSendTimeout],
++  );
++
++  const handleClear = useCallback(() => {
++    setValue('');
++    void dispatch(resetGifs());
++  }, [dispatch]);
++
++  const handleClose = useCallback(() => {
++    void dispatch(resetGifs());
++    onClose();
++  }, [dispatch, onClose]);
++
++  const handleKeyDown = useCallback(
++    (e: React.KeyboardEvent) => {
++      switch (e.key) {
++        case 'Escape':
++          e.preventDefault();
++          unfocus();
++          void dispatch(resetGifs());
++
++          break;
++        case 'Enter':
++          e.preventDefault();
++          cancelSendTimeout();
++          setDisabled(true);
++          dispatch(gifSearch(value));
++
++          break;
++      }
++    },
++    [dispatch, cancelSendTimeout, value],
++  );
++
++  const handleSelect = useCallback(
++    (result: GifResult) => {
++      setDisabled(true);
++      const url = result.url;
++      const alt = result.description;
++      fetch(url)
++        .then((response) => response.blob())
++        .then((blob) => {
++          dispatch(uploadCompose([blob], alt ?? ''));
++          onClose();
++          return;
++        })
++        .catch((e: unknown) => {
++          setDisabled(false);
++          dispatch(showAlertForError(e));
++        });
++    },
++    [dispatch, onClose],
++  );
++
++  let logoPath;
++  let logoWidth = 48;
++  switch (provider) {
++    case 'Tenor':
++      logoPath = '/tenor.svg';
++      break;
++    case 'Klipy':
++      logoPath = isDarkMode() ? '/klipy-dark.svg' : '/klipy-light.svg';
++      logoWidth = 128;
++      break;
++  }
++
++  return (
++    <div className='modal-root__modal gif-modal'>
++      <div className='gif-modal__container'>
++        <IconButton
++          title={intl.formatMessage(messages.close)}
++          icon='close'
++          iconComponent={CloseIcon}
++          onClick={handleClose}
++          style={{ float: 'right' }}
++        />
++        <div className='gif-modal__search'>
++          <input
++            ref={searchInputRef}
++            className='search__input'
++            type='text'
++            placeholder={intl.formatMessage(messages.search)}
++            aria-label={intl.formatMessage(messages.search)}
++            value={value}
++            disabled={disabled}
++            // eslint-disable-next-line jsx-a11y/no-autofocus
++            autoFocus
++            onChange={handleChange}
++            onKeyDown={handleKeyDown}
++          />
++
++          <button
++            type='button'
++            className='emoji-mart-search-icon'
++            disabled={!value || disabled}
++            aria-label={intl.formatMessage(messages.clear)}
++            onClick={handleClear}
++          >
++            <Icon id='' icon={!value ? SearchIcon : CancelIcon} />
++          </button>
++        </div>
++
++        {isLoading ? (
++          <CircularProgress size={50} strokeWidth={6} />
++        ) : (
++          results.size > 0 && (
++            <div className='gif-modal__results account-gallery__container'>
++              {results.map((gif) => (
++                <GifItem
++                  key={gif.id}
++                  gif={gif}
++                  onSelect={handleSelect}
++                  disabled={disabled}
++                />
++              ))}
++            </div>
++          )
++        )}
++        <br />
++        {provider && logoPath && (
++          <img src={logoPath} alt={provider} width={logoWidth} />
++        )}
++      </div>
++    </div>
++  );
++};
+diff --git a/app/javascript/flavours/glitch/features/ui/components/modal_root.jsx b/app/javascript/flavours/glitch/features/ui/components/modal_root.jsx
+index d6fb7a16e4..9863ee9ac9 100644
+--- a/app/javascript/flavours/glitch/features/ui/components/modal_root.jsx
++++ b/app/javascript/flavours/glitch/features/ui/components/modal_root.jsx
+@@ -5,6 +5,7 @@ import { Helmet } from '@unhead/react/helmet';
+ 
+ import Base from 'flavours/glitch/components/modal_root';
+ import { AltTextModal } from 'flavours/glitch/features/alt_text_modal';
++import { GIFModal } from 'flavours/glitch/features/gif_modal';
+ import {
+   MuteModal,
+   BlockModal,
+@@ -44,6 +45,7 @@ import {
+   ConfirmRevokeQuoteModal,
+   QuietPostQuoteInfoModal,
+ } from './confirmation_modals';
++import { PrivateQuoteNotify } from './confirmation_modals/private_quote_notify';
+ import DeprecatedSettingsModal from './deprecated_settings_modal';
+ import DoodleModal from './doodle_modal';
+ import { FavouriteModal } from './favourite_modal';
+@@ -52,7 +54,6 @@ import { MediaModal } from './media_modal';
+ import { ModalPlaceholder } from './modal_placeholder';
+ import VideoModal from './video_modal';
+ import { VisibilityModal } from './visibility_modal';
+-import { PrivateQuoteNotify } from './confirmation_modals/private_quote_notify';
+ 
+ export const MODAL_COMPONENTS = {
+   'MEDIA': () => Promise.resolve({ default: MediaModal }),
+@@ -62,6 +63,7 @@ export const MODAL_COMPONENTS = {
+   'BOOST': () => Promise.resolve({ default: BoostModal }),
+   'FAVOURITE': () => Promise.resolve({ default: FavouriteModal }),
+   'DOODLE': () => Promise.resolve({ default: DoodleModal }),
++  'GIF': () => Promise.resolve({ default: GIFModal }),
+   'CONFIRM': () => Promise.resolve({ default: ConfirmationModal }),
+   'CONFIRM_DELETE_STATUS': () => Promise.resolve({ default: ConfirmDeleteStatusModal }),
+   'CONFIRM_DELETE_LIST': () => Promise.resolve({ default: ConfirmDeleteListModal }),
+diff --git a/app/javascript/flavours/glitch/locales/en.json b/app/javascript/flavours/glitch/locales/en.json
+index 08a5ca27ee..e6b6974a46 100644
+--- a/app/javascript/flavours/glitch/locales/en.json
++++ b/app/javascript/flavours/glitch/locales/en.json
+@@ -16,6 +16,7 @@
+   "column_header.profile": "Profile",
+   "community.column_settings.allow_local_only": "Show local-only toots",
+   "compose.attach.doodle": "Draw something",
++  "compose.attach.gif": "Upload GIF",
+   "compose.change_federation": "Change federation settings",
+   "compose.content-type.change": "Change advanced formatting options",
+   "compose.content-type.html": "HTML",
+@@ -42,6 +43,10 @@
+   "federation.local_only.short": "Local-only",
+   "firehose.bubble": "Bubble servers",
+   "firehose.column_settings.allow_local_only": "Show local-only posts in \"All\"",
++  "gif_search.error": "Oops! Something went wrong. Please, try again.",
++  "gif_search.loading": "Loading...",
++  "gif_search.nomatches": "No matches found.",
++  "gif_search.search": "Search for GIFs",
+   "home.column_settings.advanced": "Advanced",
+   "home.column_settings.filter_regex": "Filter out by regular expressions",
+   "home.column_settings.show_direct": "Show private mentions",
+@@ -50,9 +55,8 @@
+   "keyboard_shortcuts.secondary_toot": "to send toot using secondary privacy setting",
+   "moved_to_warning": "This account is marked as moved to {moved_to_link}, and may thus not accept new follows.",
+   "navigation_bar.app_settings": "App settings",
+-  "notification.reaction": "{name} reacted to your post <e>with</e>",
+-  "notification.reaction.name_and_others_with_link": "{name} and <a>{count, plural, one {# other} other {# others}}</a> reacted to your post",
+   "navigation_bar.live_feed_bubble": "Live feed (bubble)",
++  "notification.reaction.name_and_others_with_link": "{name} and <a>{count, plural, one {# other} other {# others}}</a> reacted to your post",
+   "notifications.column_settings.filter_bar.show_bar": "Show filter bar",
+   "notifications.column_settings.reaction": "Reactions:",
+   "notifications.filter.reactions": "Reactions",
+@@ -81,6 +85,7 @@
+   "settings.media_letterbox": "Letterbox media",
+   "settings.media_letterbox_hint": "Scale down and letterbox media to fill the image containers instead of stretching and cropping them",
+   "settings.media_reveal_behind_cw": "Reveal sensitive media behind a CW by default",
++  "settings.mention_reblogger": "Mention booster when replying to a boosted post",
+   "settings.notifications.favicon_badge": "Unread notifications favicon badge",
+   "settings.notifications.favicon_badge.hint": "Add a badge for unread notifications to the favicon",
+   "settings.notifications.tab_badge": "Unread notifications badge",
+@@ -119,6 +124,7 @@
+   "settings.tag_misleading_links.hint": "Add a visual indication with the link target host to every link not mentioning it explicitly",
+   "settings.wide_view": "Wide view (Desktop mode only)",
+   "settings.wide_view_hint": "Stretches columns to better fill the available space.",
++  "settings.zoom_emojis_on_hover": "Zoom in on emojis when hovering over them",
+   "status.filtered": "Filtered",
+   "status.has_audio": "Features attached audio files",
+   "status.has_pictures": "Features attached pictures",
+diff --git a/app/javascript/flavours/glitch/models/gif.ts b/app/javascript/flavours/glitch/models/gif.ts
+new file mode 100644
+index 0000000000..a21dbb2b8b
+--- /dev/null
++++ b/app/javascript/flavours/glitch/models/gif.ts
+@@ -0,0 +1,6 @@
++import type { RecordOf } from 'immutable';
++
++import type { ApiGifResultJSON } from 'flavours/glitch/api_types/gif';
++
++type GifResultShape = Required<ApiGifResultJSON>;
++export type GifResult = RecordOf<GifResultShape>;
+diff --git a/app/javascript/flavours/glitch/reducers/compose.js b/app/javascript/flavours/glitch/reducers/compose.js
+index 23dd16d93d..b63c6e6a98 100644
+--- a/app/javascript/flavours/glitch/reducers/compose.js
++++ b/app/javascript/flavours/glitch/reducers/compose.js
+@@ -52,6 +52,10 @@ import {
+   COMPOSE_CONTENT_TYPE_CHANGE,
+   COMPOSE_EMOJI_INSERT,
+   COMPOSE_DOODLE_SET,
++  COMPOSE_GIF_RESET,
++  COMPOSE_GIF_SEARCH_REQUEST,
++  COMPOSE_GIF_SEARCH_SUCCESS,
++  COMPOSE_GIF_SEARCH_FAIL,
+   COMPOSE_RESET,
+   COMPOSE_POLL_ADD,
+   COMPOSE_POLL_REMOVE,
+@@ -111,6 +115,11 @@ const initialState = ImmutableMap({
+   resetFileKey: Math.floor((Math.random() * 0x10000)),
+   idempotencyKey: null,
+   tagHistory: ImmutableList(),
++  gifs: ImmutableMap({
++    provider: '',
++    items: ImmutableOrderedSet(),
++    isLoading: false,
++  }),
+   doodle: ImmutableMap({
+     fg: 'rgb(  0,    0,    0)',
+     bg: 'rgb(255,  255,  255)',
+@@ -136,12 +145,15 @@ const initialPoll = ImmutableMap({
+   multiple: false,
+ });
+ 
+-function statusToTextMentions(state, status) {
++function statusToTextMentions(state, status, statusRebloggedBy) {
+   let set = ImmutableOrderedSet([]);
+ 
+   if (status.getIn(['account', 'id']) !== me) {
+     set = set.add(`@${status.getIn(['account', 'acct'])} `);
+   }
++  if (statusRebloggedBy) {
++    set = set.add(`@${statusRebloggedBy.get('acct')}`);
++  }
+ 
+   return set.union(status.get('mentions').filterNot(mention => mention.get('id') === me).map(mention => `@${mention.get('acct')} `)).join('');
+ }
+@@ -322,6 +334,14 @@ const insertEmoji = (state, position, emojiData, needsSpace) => {
+   });
+ };
+ 
++const normalizeList = (state, path, gifs, provider) => {
++  return state.setIn(path, ImmutableMap({
++    provider,
++    items: ImmutableOrderedSet(gifs),
++    isLoading: false,
++  }));
++};
++
+ const hydrate = (state, hydratedState) => {
+   state = clearAll(state.merge(hydratedState));
+ 
+@@ -564,7 +584,7 @@ export const composeReducer = (state = initialState, action) => {
+     return state.withMutations(map => {
+       map.set('id', null);
+       map.set('in_reply_to', action.status.get('id'));
+-      map.set('text', statusToTextMentions(state, action.status));
++      map.set('text', statusToTextMentions(state, action.status, action.statusRebloggedBy));
+       map.set('privacy', privacyPreference(action.status.get('visibility'), state.get('default_privacy')));
+       map.update(
+         'advanced_options',
+@@ -693,6 +713,14 @@ export const composeReducer = (state = initialState, action) => {
+     return insertEmoji(state, action.position, action.emoji, action.needsSpace);
+   case COMPOSE_DOODLE_SET:
+     return state.mergeIn(['doodle'], action.options);
++  case COMPOSE_GIF_RESET:
++    return state.setIn(['gifs', 'items'], ImmutableOrderedSet());
++  case COMPOSE_GIF_SEARCH_REQUEST:
++    return state.setIn(['gifs', 'isLoading'], true);
++  case COMPOSE_GIF_SEARCH_SUCCESS:
++    return normalizeList(state, ['gifs'], action.results, action.provider);
++  case COMPOSE_GIF_SEARCH_FAIL:
++    return state.setIn(['gifs', 'isLoading'], false);
+   case REDRAFT: {
+     const do_not_federate = !!action.status.get('local_only');
+     let text = action.raw_text || unescapeHTML(expandMentions(action.status));
+diff --git a/app/javascript/flavours/glitch/styles/mastodon/components.scss b/app/javascript/flavours/glitch/styles/mastodon/components.scss
+index 9059ca6be3..a1a47c4371 100644
+--- a/app/javascript/flavours/glitch/styles/mastodon/components.scss
++++ b/app/javascript/flavours/glitch/styles/mastodon/components.scss
+@@ -518,11 +518,17 @@ body > [data-popover-placement] {
+ }
+ 
+ .autosuggest-account .account__avatar,
++.account__emoji,
+ .autosuggest-emoji .emojione {
+   display: block;
+   width: 24px;
+   height: 24px;
+   flex: 0 0 auto;
++
++  img {
++    height: 100%;
++    width: 100%;
++  }
+ }
+ 
+ .compose-form {
+@@ -1597,6 +1603,7 @@ body > [data-popover-placement] {
+ 
+     & > .status__content,
+     & > .status__action-bar,
++    & > .reactions-bar,
+     & > .media-gallery,
+     & > div > .video-player,
+     & > .audio-player,
+@@ -1865,6 +1872,14 @@ body > [data-popover-placement] {
+   &-spacer {
+     flex-grow: 1;
+   }
++
++  & > .emoji-picker-dropdown {
++    height: 24px;
++
++    > .emoji-button {
++      padding: 0;
++    }
++  }
+ }
+ 
+ .detailed-status__action-bar-dropdown {
+@@ -5242,6 +5257,10 @@ a.status-card {
+   text-align: center;
+ }
+ 
++.detailed-status__button .emoji-button {
++  padding: 0;
++}
++
+ .column-settings {
+   display: flex;
+   flex-direction: column;
+@@ -6954,6 +6973,7 @@ a.status-card {
+ }
+ 
+ .doodle-modal,
++.gif-modal,
+ .boost-modal,
+ .report-modal,
+ .actions-modal,
+@@ -9068,6 +9088,8 @@ noscript {
+   }
+ 
+   &--empty {
++    margin-top: 0;
++
+     .emoji-button {
+       padding: 0;
+     }
+@@ -10189,7 +10211,8 @@ noscript {
+     }
+   }
+ 
+-  &__domain-blocks {
++  &__domain-blocks,
++  &__bubble-domains {
+     margin-top: 30px;
+     border: 1px solid var(--color-border-primary);
+     border-radius: 4px;
+@@ -10837,6 +10860,10 @@ noscript {
+     color: var(--color-text-favourite-highlight);
+   }
+ 
++  &--reaction &__icon {
++    color: var(--color-text-brand);
++  }
++
+   &--reblog &__icon {
+     color: var(--color-text-success);
+   }
+@@ -11061,6 +11088,7 @@ noscript {
+ 
+   .status__content,
+   .status__action-bar,
++  .reactions-bar,
+   .media-gallery,
+   .video-player,
+   .audio-player,
+@@ -11295,6 +11323,57 @@ noscript {
+   }
+ }
+ 
++.gif-modal__container {
++  text-align: center;
++  padding: 20px;
++
++  .icon-button {
++    margin: 10px;
++  }
++
++  .search__input {
++    padding-inline-start: 16px;
++    padding-inline-end: 16px + 15px + 8px;
++  }
++
++  .emoji-mart-search-icon {
++    inset-inline-end: 20px;
++    top: 66px;
++    padding: 0;
++    margin: 10px 10px 6px;
++    opacity: 1;
++    color: var(--color-text-tertiary);
++
++    &:disabled {
++      opacity: 0.38;
++    }
++  }
++
++  > .gif-modal__results {
++    padding-top: 16px;
++
++    .media-gallery__item {
++      &:hover {
++        opacity: 0.5;
++      }
++
++      &-thumbnail {
++        padding: 0;
++        border: 0;
++
++        &:disabled {
++          opacity: 0.5;
++          cursor: not-allowed;
++        }
++      }
++    }
++  }
++
++  > .circular-progress {
++    margin: 16px 0;
++  }
++}
++
+ .content-warning {
+   display: block;
+   box-sizing: border-box;
+diff --git a/app/javascript/mastodon/features/ui/components/modal_root.jsx b/app/javascript/mastodon/features/ui/components/modal_root.jsx
+index 97e794a94d..d457fee017 100644
+--- a/app/javascript/mastodon/features/ui/components/modal_root.jsx
++++ b/app/javascript/mastodon/features/ui/components/modal_root.jsx
+@@ -43,12 +43,12 @@ import {
+   ConfirmRevokeQuoteModal,
+   QuietPostQuoteInfoModal,
+ } from './confirmation_modals';
++import { PrivateQuoteNotify } from './confirmation_modals/private_quote_notify';
+ import { ImageModal } from './image_modal';
+ import { MediaModal } from './media_modal';
+ import { ModalPlaceholder } from './modal_placeholder';
+ import VideoModal from './video_modal';
+ import { VisibilityModal } from './visibility_modal';
+-import { PrivateQuoteNotify } from './confirmation_modals/private_quote_notify';
+ 
+ export const MODAL_COMPONENTS = {
+   'MEDIA': () => Promise.resolve({ default: MediaModal }),
+diff --git a/app/javascript/material-icons/400-24px/gif_box.svg b/app/javascript/material-icons/400-24px/gif_box.svg
+new file mode 100644
+index 0000000000..eb82d8c630
+--- /dev/null
++++ b/app/javascript/material-icons/400-24px/gif_box.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm240-160h60v-240h-60v240Zm-160 0h80q17 0 28.5-11.5T400-400v-80h-60v60h-40v-120h100v-20q0-17-11.5-28.5T360-600h-80q-17 0-28.5 11.5T240-560v160q0 17 11.5 28.5T280-360Zm280 0h60v-80h80v-60h-80v-40h120v-60H560v240ZM200-200v-560 560Z"/></svg>
+\ No newline at end of file
+diff --git a/app/lib/content_security_policy.rb b/app/lib/content_security_policy.rb
+index 6ddfd279b8..881b78ed59 100644
+--- a/app/lib/content_security_policy.rb
++++ b/app/lib/content_security_policy.rb
+@@ -10,7 +10,7 @@ class ContentSecurityPolicy
+   end
+ 
+   def media_hosts
+-    [assets_host, cdn_host_value, paperclip_root_url].concat(extra_media_hosts).compact
++    [assets_host, cdn_host_value, paperclip_root_url, gif_media_url].concat(extra_data_hosts).compact
+   end
+ 
+   # In the admin area we might need signed URLs that use this domain
+@@ -53,6 +53,14 @@ class ContentSecurityPolicy
+     Rails.configuration.action_controller.asset_host
+   end
+ 
++  def gif_media_url
++    if Rails.configuration.x.gifs.klipy[:api_key].present?
++      'https://static.klipy.com'
++    elsif Rails.configuration.x.gifs.tenor[:api_key].present?
++      'https://media.tenor.com'
++    end
++  end
++
+   def cdn_host_value
+     s3_alias_host || s3_cloudfront_host || azure_alias_host || s3_hostname_host || swift_object_url
+   end
+diff --git a/app/lib/gif_service.rb b/app/lib/gif_service.rb
+new file mode 100644
+index 0000000000..ca73502b5c
+--- /dev/null
++++ b/app/lib/gif_service.rb
+@@ -0,0 +1,38 @@
++# frozen_string_literal: true
++
++class GifService
++  class Error < StandardError; end
++  class NotConfiguredError < Error; end
++  class TooManyRequestsError < Error; end
++  class UnexpectedResponseError < Error; end
++
++  def self.configured
++    if configuration.klipy[:api_key].present?
++      GifService::Klipy.new(
++        configuration.klipy[:api_key]
++      )
++    elsif configuration.tenor[:api_key].present?
++      GifService::Tenor.new(
++        configuration.tenor[:api_key]
++      )
++    else
++      raise NotConfiguredError
++    end
++  end
++
++  def self.configured?
++    configuration.klipy[:api_key].present? || configuration.tenor[:api_key].present?
++  end
++
++  def self.provider
++    if configuration.klipy[:api_key].present?
++      'Klipy'
++    elsif configuration.tenor[:api_key].present?
++      'Tenor'
++    end
++  end
++
++  def self.configuration
++    Rails.configuration.x.gifs
++  end
++end
+diff --git a/app/lib/gif_service/klipy.rb b/app/lib/gif_service/klipy.rb
+new file mode 100644
+index 0000000000..18ac761bae
+--- /dev/null
++++ b/app/lib/gif_service/klipy.rb
+@@ -0,0 +1,50 @@
++# frozen_string_literal: true
++
++class GifService::Klipy < GifService
++  include JsonLdHelper
++
++  def initialize(api_key)
++    super()
++
++    @api_key = api_key
++  end
++
++  def search(query)
++    params = { q: query, customer_id: Rails.configuration.x.web_domain, locale: I18n.locale.to_s, format_filter: 'mp4', per_page: 12 }
++    request(:get, @api_key, '/gifs/search', params: params) do |res|
++      transform_response(res.body_with_limit)
++    end
++  end
++
++  private
++
++  def request(verb, key, path, **)
++    req = Request.new(verb, "#{base_url}#{key}#{path}", **)
++    req.perform do |res|
++      case res.code
++      when 429
++        raise TooManyRequestsError
++      when 200...300
++        yield res
++      else
++        raise UnexpectedResponseError
++      end
++    end
++  end
++
++  def base_url
++    'https://api.klipy.com/api/v1/'
++  end
++
++  def transform_response(json)
++    data = JSON.parse(json)
++    raise UnexpectedResponseError unless data.is_a?(Hash)
++
++    results = data['data']['data'].map do |media_response|
++      GifResults::GifResult.new(id: media_response['id'], url: media_response['file']['hd']['mp4']['url'], description: media_response['title'])
++    end
++    GifResults.new(provider: 'Klipy', results: results)
++  rescue JSON::ParserError
++    raise UnexpectedResponseError
++  end
++end
+diff --git a/app/lib/gif_service/tenor.rb b/app/lib/gif_service/tenor.rb
+new file mode 100644
+index 0000000000..c4890fac60
+--- /dev/null
++++ b/app/lib/gif_service/tenor.rb
+@@ -0,0 +1,50 @@
++# frozen_string_literal: true
++
++class GifService::Tenor < GifService
++  include JsonLdHelper
++
++  def initialize(api_key)
++    super()
++
++    @api_key = api_key
++  end
++
++  def search(query)
++    params = { q: query, key: @api_key, client_key: Rails.configuration.x.web_domain, locale: I18n.locale.to_s, media_filter: 'mp4', limit: 12 }
++    request(:get, '/v2/search', params: params) do |res|
++      transform_response(res.body_with_limit)
++    end
++  end
++
++  private
++
++  def request(verb, path, **)
++    req = Request.new(verb, "#{base_url}#{path}", **)
++    req.perform do |res|
++      case res.code
++      when 429
++        raise TooManyRequestsError
++      when 200...300
++        yield res
++      else
++        raise UnexpectedResponseError
++      end
++    end
++  end
++
++  def base_url
++    'https://tenor.googleapis.com'
++  end
++
++  def transform_response(json)
++    data = JSON.parse(json)
++    raise UnexpectedResponseError unless data.is_a?(Hash)
++
++    results = data['results'].map do |media_response|
++      GifResults::GifResult.new(id: media_response['id'], url: media_response['media_formats']['mp4']['url'], description: media_response['content_description'])
++    end
++    GifResults.new(provider: 'Tenor', results: results)
++  rescue JSON::ParserError
++    raise UnexpectedResponseError
++  end
++end
+diff --git a/app/models/gif_results.rb b/app/models/gif_results.rb
+new file mode 100644
+index 0000000000..68cc317ac9
+--- /dev/null
++++ b/app/models/gif_results.rb
+@@ -0,0 +1,9 @@
++# frozen_string_literal: true
++
++class GifResults < ActiveModelSerializers::Model
++  attributes :provider, :results
++
++  class GifResult < ActiveModelSerializers::Model
++    attributes :id, :description, :url
++  end
++end
+diff --git a/app/serializers/rest/gif_results_serializer.rb b/app/serializers/rest/gif_results_serializer.rb
+new file mode 100644
+index 0000000000..1632256508
+--- /dev/null
++++ b/app/serializers/rest/gif_results_serializer.rb
+@@ -0,0 +1,11 @@
++# frozen_string_literal: true
++
++class REST::GifResultsSerializer < ActiveModel::Serializer
++  attribute :provider
++
++  class GifResultSerializer < ActiveModel::Serializer
++    attributes :id, :description, :url
++  end
++
++  has_many :results, serializer: GifResultSerializer
++end
+diff --git a/app/serializers/rest/instance_serializer.rb b/app/serializers/rest/instance_serializer.rb
+index 8d655f8ede..5bcc8aed12 100644
+--- a/app/serializers/rest/instance_serializer.rb
++++ b/app/serializers/rest/instance_serializer.rb
+@@ -100,6 +100,7 @@ class REST::InstanceSerializer < ActiveModel::Serializer
+       },
+ 
+       polls: {
++        allow_media: true,
+         max_options: PollOptionsValidator::MAX_OPTIONS,
+         max_characters_per_option: PollOptionsValidator::MAX_OPTION_CHARS,
+         min_expiration: PollExpirationValidator::MIN_EXPIRATION,
+@@ -114,6 +115,11 @@ class REST::InstanceSerializer < ActiveModel::Serializer
+         max_reactions: StatusReactionValidator::LIMIT,
+       },
+ 
++      gif_search: {
++        enabled: GifService.configured?,
++        provider: GifService.provider,
++      },
++
+       timelines_access: {
+         live_feeds: {
+           local: Setting.local_live_feed_access,
+diff --git a/app/services/search_gifs_service.rb b/app/services/search_gifs_service.rb
+new file mode 100644
+index 0000000000..1643c2f19f
+--- /dev/null
++++ b/app/services/search_gifs_service.rb
+@@ -0,0 +1,25 @@
++# frozen_string_literal: true
++
++class SearchGifsService < BaseService
++  CACHE_TTL = 1.day.freeze
++
++  include FormattingHelper
++
++  def call(query)
++    @query = query
++
++    raise Mastodon::NotPermittedError unless GifService.configured?
++
++    Rails.cache.fetch("gifs/#{query_hash}", expires_in: CACHE_TTL) { search_backend.search(@query) }
++  end
++
++  private
++
++  def search_backend
++    @search_backend ||= GifService.configured
++  end
++
++  def query_hash
++    Digest::SHA256.base64digest(@query)
++  end
++end
+diff --git a/config/application.rb b/config/application.rb
+index 6f8a79d68d..04997836ef 100644
+--- a/config/application.rb
++++ b/config/application.rb
+@@ -31,6 +31,7 @@ require_relative '../lib/paperclip/gif_transcoder'
+ require_relative '../lib/paperclip/transcoder'
+ require_relative '../lib/paperclip/type_corrector'
+ require_relative '../lib/paperclip/response_with_limit_adapter'
++require_relative '../lib/paperclip/qr_decoder'
+ require_relative '../lib/terrapin/multi_pipe_extensions'
+ require_relative '../lib/mastodon/middleware/public_file_server'
+ require_relative '../lib/mastodon/middleware/socket_cleanup'
+@@ -103,6 +104,7 @@ module Mastodon
+     config.x.mastodon = config_for(:mastodon)
+     config.x.omniauth = config_for(:omniauth)
+     config.x.translation = config_for(:translation)
++    config.x.gifs = config_for(:gifs)
+     config.x.vapid = config_for(:vapid)
+ 
+     if ENV.fetch('QUERY_LOG_TAGS_ENABLED', 'false') == 'true'
+diff --git a/config/gifs.yml b/config/gifs.yml
+new file mode 100644
+index 0000000000..95daf0186f
+--- /dev/null
++++ b/config/gifs.yml
+@@ -0,0 +1,5 @@
++shared:
++  klipy:
++    api_key: <%= ENV.fetch('KLIPY_API_KEY', nil) %>
++  tenor:
++    api_key: <%= ENV.fetch('TENOR_API_KEY', nil) %>
+diff --git a/config/locales-glitch/en.yml b/config/locales-glitch/en.yml
+index e89374d87e..8da3c3de84 100644
+--- a/config/locales-glitch/en.yml
++++ b/config/locales-glitch/en.yml
+@@ -23,12 +23,18 @@ en:
+       outgoing_spoilers:
+         desc_html: When federating toots, add this content warning to toots that do not have one. It is useful if your server is specialized in content other servers might want to have under a Content Warning. Media will also be marked as sensitive.
+         title: Content warning for outgoing toots
+-      show_reblogs_in_public_timelines:
+-        desc_html: Show public boosts of public toots in local and public timelines.
+-        title: Show boosts in public timelines
+-      show_replies_in_public_timelines:
+-        desc_html: In addition to public self-replies (threads), show public replies in local and public timelines.
+-        title: Show replies in public timelines
++      show_reblogs_in_federated_timelines:
++        desc_html: Show public boosts of public toots in the federated timeline.
++        title: Show boosts in the federated timeline
++      show_reblogs_in_local_timelines:
++        desc_html: Show public boosts in the instance's local timeline.
++        title: Show boosts in the local timeline
++      show_replies_in_federated_timelines:
++        desc_html: In addition to public self-replies (threads), show public replies in the federated timeline.
++        title: Show replies in the federated timeline
++      show_replies_in_local_timelines:
++        desc_html: In addition to public self-replies (threads), show public replies in the instance's local timeline.
++        title: Show replies in the local timeline
+       trending_status_cw:
+         desc_html: When trending posts are enabled, allow posts with Content Warnings to be eligible. Changes to this setting are not retroactive.
+         title: Allow posts with Content Warnings to trend
+@@ -47,5 +53,13 @@ en:
+       body: "%{name} reacted to your post:"
+       subject: "%{name} reacted to your post"
+       title: New reaction
++  gif:
++    errors:
++      too_many_requests: There have been too many requests to the GIF search service recently.
+   settings:
+     flavours: Flavours
++  notification_mailer:
++    reaction:
++      body: "%{name} reacted to your post:"
++      subject: "%{name} reacted to your post"
++      title: New reaction
+diff --git a/config/routes/api.rb b/config/routes/api.rb
+index 1df408af21..f6c22fd6ff 100644
+--- a/config/routes/api.rb
++++ b/config/routes/api.rb
+@@ -123,6 +123,7 @@ namespace :api, format: false do
+     resources :filters, only: [:index, :create, :show, :update, :destroy]
+     resources :endorsements, only: [:index]
+     resources :markers, only: [:index, :create]
++    resources :gifs, only: [:index]
+ 
+     resource :profile, only: [:show, :update] do
+       scope module: :profile do
+diff --git a/public/klipy-dark.svg b/public/klipy-dark.svg
+new file mode 100644
+index 0000000000..9f3dbfc9ca
+--- /dev/null
++++ b/public/klipy-dark.svg
+@@ -0,0 +1,64 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Generator: Adobe Illustrator 28.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
++<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
++	 viewBox="0 0 640 107.3" style="enable-background:new 0 0 640 107.3;" xml:space="preserve">
++<style type="text/css">
++	.st0{fill:#FFFFFF;}
++	.st1{opacity:0.4;}
++	.st2{fill:#F7DC3C;}
++	.st3{fill:#EE4523;}
++</style>
++<g>
++	<g>
++		<path class="st0" d="M498.7,107.1h-16.5c-1.9,0-3.3-1.5-3.3-3.3V33.1c0-1.9,1.5-3.3,3.3-3.3h16.5c1.9,0,3.3,1.5,3.3,3.3v70.6
++			C502.1,105.7,500.7,107.1,498.7,107.1z"/>
++		<path class="st0" d="M441.4,83.4V33.1c0-1.9-1.5-3.3-3.3-3.3h-16.5c-1.9,0-3.3,1.5-3.3,3.3v53.7v17c0,1.9,1.5,3.3,3.3,3.3h19.7
++			h29.3c1.9,0,3.3-1.5,3.3-3.3V90.1c0-1.9-1.5-3.3-3.3-3.3h-25.9C442.9,86.7,441.4,85.4,441.4,83.4z"/>
++		<path class="st0" d="M539.2,29.8c-0.8,0-2.6,0-2.7,0h-8.2h-18.1c-1.9,0-3.3,1.5-3.3,3.3v70.6c0,1.9,1.5,3.3,3.3,3.3h16.5
++			c1.9,0,3.3-1.5,3.3-3.3V84.3c0-0.6,0.6-1,1-0.8c8.3,2.4,19,2.6,28.4-6.6C579.4,56.9,560.7,29.8,539.2,29.8z M545,63.7
++			c-8.8,6.3-18.6-3.5-12.3-12.3c0.2-0.3,0.5-0.6,0.8-0.8c8.8-6.3,18.6,3.5,12.3,12.3C545.5,63.2,545.2,63.5,545,63.7z"/>
++		<path class="st0" d="M639.1,42l-11.3-11.3c-1.3-1.3-3.3-1.3-4.7,0L605,48.8c-0.5,0.5-1.4,0.5-1.8,0l-18.1-18.1
++			c-1.3-1.3-3.3-1.3-4.7,0L569.3,42c-1.3,1.3-1.3,3.3,0,4.7l23.2,23.2c0.2,0.2,0.3,0.6,0.3,0.9v33.1c0,1.8,1.5,3.2,3.2,3.2h16.1
++			c1.8,0,3.2-1.5,3.2-3.2v-33c0-0.3,0.1-0.7,0.3-0.9l23.2-23.2C640.3,45.4,640.3,43.3,639.1,42z"/>
++	</g>
++</g>
++<g class="st1">
++	<path class="st0" d="M23,54.1c2,2,3,4.7,3,8.1c0,2.3-0.5,4.4-1.4,6c-0.9,1.7-2.3,2.9-4,3.8c-1.7,0.8-3.6,1.4-5.8,1.4h-8v12.5H0
++		V51.2h14.9C18.3,51.2,21,52.1,23,54.1z M14.1,67.2c1.5,0,2.6-0.5,3.5-1.4c0.9-0.8,1.4-2.1,1.4-3.6c0-1.7-0.5-2.9-1.4-3.7
++		s-2.2-1.4-3.5-1.4H6.9v10.1H14.1L14.1,67.2z"/>
++	<path class="st0" d="M56.9,52.8c2.7,1.5,4.8,3.5,6.4,6.2c1.6,2.7,2.3,5.8,2.3,9.4s-0.8,6.8-2.3,9.4c-1.6,2.7-3.6,4.7-6.4,6.2
++		c-2.8,1.4-5.7,2.2-9.3,2.2S41,85.5,38.3,84s-4.9-3.5-6.5-6.2c-1.6-2.7-2.3-5.8-2.3-9.4s0.8-6.8,2.3-9.4c1.6-2.7,3.6-4.7,6.5-6.2
++		c2.7-1.5,5.8-2.2,9.3-2.2S54.2,51.4,56.9,52.8z M38,74.7c0.9,1.8,2.3,3.1,3.9,4.1c1.7,1,3.5,1.4,5.7,1.4c2.1,0,4.1-0.5,5.6-1.4
++		c1.7-0.9,2.9-2.3,3.9-4.1c0.9-1.8,1.4-3.9,1.4-6.3s-0.5-4.5-1.4-6.3S54.9,59,53.2,58c-1.7-0.9-3.5-1.4-5.6-1.4
++		c-2.2,0-4.1,0.5-5.7,1.4c-1.7,0.9-2.9,2.3-3.9,4.1c-0.9,1.8-1.4,3.9-1.4,6.3S37.1,72.9,38,74.7z"/>
++	<path class="st0" d="M92.9,63.1l-7.5,22.6h-5.8L67.5,51.1H75l7.5,23.3L90,51.1h5.6l7.5,23.3l7.5-23.3h7.5L106,85.8h-5.8L92.9,63.1z
++		"/>
++	<path class="st0" d="M129.4,65h13.3v6h-13.3v8.7h15.3v6.1h-22.2V51.2h22.1v6h-15.3L129.4,65L129.4,65z"/>
++	<path class="st0" d="M150.5,51.2h14.7c3.3,0,6,1,8.1,2.9s3,4.7,3,8.1c0,2.4-0.5,4.4-1.5,6.1s-2.4,2.9-4.2,3.8l7.5,13.7h-7.8
++		l-6.9-12.6h-0.6h-5.4v12.6h-6.9L150.5,51.2L150.5,51.2z M164.3,67.1c1.5,0,2.7-0.5,3.6-1.4c0.9-0.9,1.4-2.1,1.4-3.6
++		c0-1.6-0.5-2.8-1.4-3.6s-2.1-1.4-3.6-1.4h-7V67L164.3,67.1L164.3,67.1z"/>
++	<path class="st0" d="M190,65h13.3v6H190v8.7h15.3v6.1h-22.2V51.2h22.1v6H190V65L190,65z"/>
++	<path class="st0" d="M234,53.1c2.6,1.4,4.7,3.4,6.1,6c1.5,2.6,2.3,5.6,2.3,9.3s-0.8,6.7-2.3,9.3c-1.5,2.6-3.5,4.6-6.1,6
++		s-5.6,2.1-8.9,2.1H211V51.2h14.2C228.5,51.2,231.5,51.8,234,53.1z M225.3,79.9c3.2,0,5.6-1,7.5-2.9c1.9-2,2.8-4.8,2.8-8.4
++		c0-3.7-0.9-6.6-2.8-8.4c-1.9-2-4.4-2.9-7.5-2.9h-7.4v22.8L225.3,79.9L225.3,79.9z"/>
++	<path class="st0" d="M281,53.6c2,1.7,2.9,4.1,2.9,7.2c0,1.6-0.3,2.9-0.8,4.1c-0.6,1.1-1.4,2.1-2.3,2.8c1.4,0.6,2.4,1.6,3.2,3
++		c0.8,1.4,1.4,3.1,1.4,5.2c0,3.2-1,5.7-3,7.5s-4.7,2.6-8.1,2.6h-15.4V51.2h14.4C276.4,51.2,279,51.9,281,53.6z M272.8,65.1
++		c1.2,0,2.3-0.3,3-0.9s1.1-1.7,1.1-2.9c0-1.4-0.4-2.3-1.2-3c-0.8-0.7-2-1-3.3-1h-6.7v7.8H272.8L272.8,65.1z M273.3,79.7
++		c1.6,0,2.7-0.4,3.6-1.1s1.4-1.8,1.4-3.2c0-1.5-0.5-2.6-1.4-3.2c-0.8-0.7-2-1.1-3.5-1.1h-7.8v8.7L273.3,79.7L273.3,79.7z"/>
++	<path class="st0" d="M300.4,85.7V72.3L287.2,51h8l8.6,14.5l8.7-14.4h8l-13.1,21.3v13.4L300.4,85.7L300.4,85.7z"/>
++</g>
++<g>
++	<g>
++		<g>
++			<path class="st2" d="M407.6,104.3L385,69.4c-0.4-0.7-0.4-1.4,0-2l21.2-34.9c0.8-1.3-0.1-3-1.7-3l-13.4,3
++				c-10.6,2.4-13.8,8.6-20.2,17.5c-1.2,1.7-2,2.9-2,2.9c-1,1.8-3.7,1.1-3.7-1V23.2c-8.1,0-12.4,3-15.6,5.7
++				c-10.2,8.4-12.4,18.8-12.4,32v44.4c0,1.1,0.9,2,2,2h24.2c1.1,0,2-0.9,2-2V83.2c0-2,2.6-2.7,3.6-1l8.2,24.2c0.4,0.7,1,1,1.7,1
++				h27.2C407.5,107.2,408.5,105.5,407.6,104.3z M359.7,33.4c-1.5,0-2.7-1.2-2.7-2.7s1.2-2.7,2.7-2.7s2.7,1.2,2.7,2.7
++				C362.3,32.3,361.2,33.4,359.7,33.4z"/>
++		</g>
++		<path class="st3" d="M333.8,48.8c0.2,0.6,2.1-29.7,31.7-30c0,0-24-28.2-32.9-15.6c0,0-4.4,6.9,4.1,9.1c0,0-13.7,3.6-13.5,13.1
++			c0.1,3,3.1,4.9,5.9,3.7c1.6-0.7,3.6-2,6.2-4.4C335.3,24.6,329.3,36.7,333.8,48.8z"/>
++	</g>
++	<path class="st3" d="M368.5,24.4v7.4c0,0.6,0.6,0.9,1,0.6l7.1-4.7l-7.1-3.8C369,23.6,368.5,23.9,368.5,24.4z"/>
++</g>
++</svg>
+diff --git a/public/klipy-light.svg b/public/klipy-light.svg
+new file mode 100644
+index 0000000000..703b257798
+--- /dev/null
++++ b/public/klipy-light.svg
+@@ -0,0 +1,65 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Generator: Adobe Illustrator 28.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
++<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
++	 viewBox="0 0 640 107.3" style="enable-background:new 0 0 640 107.3;" xml:space="preserve">
++<style type="text/css">
++	.st0{opacity:0.4;}
++	.st1{fill:#F7DC3C;}
++	.st2{fill:#EE4523;}
++</style>
++<g>
++	<g>
++		<g>
++			<path d="M498.7,107.1h-16.5c-1.9,0-3.3-1.5-3.3-3.3V33.1c0-1.9,1.5-3.3,3.3-3.3h16.5c1.9,0,3.3,1.5,3.3,3.3v70.6
++				C502.1,105.7,500.7,107.1,498.7,107.1z"/>
++			<path d="M441.4,83.4V33.1c0-1.9-1.5-3.3-3.3-3.3h-16.5c-1.9,0-3.3,1.5-3.3,3.3v53.7v17c0,1.9,1.5,3.3,3.3,3.3h19.7h29.3
++				c1.9,0,3.3-1.5,3.3-3.3V90.1c0-1.9-1.5-3.3-3.3-3.3h-25.9C442.9,86.7,441.4,85.4,441.4,83.4z"/>
++			<path d="M539.2,29.8c-0.8,0-2.6,0-2.7,0h-8.2h-18.1c-1.9,0-3.3,1.5-3.3,3.3v70.6c0,1.9,1.5,3.3,3.3,3.3h16.5
++				c1.9,0,3.3-1.5,3.3-3.3V84.3c0-0.6,0.6-1,1-0.8c8.3,2.4,19,2.6,28.4-6.6C579.4,56.9,560.7,29.8,539.2,29.8z M545,63.7
++				c-8.8,6.3-18.6-3.5-12.3-12.3c0.2-0.3,0.5-0.6,0.8-0.8c8.8-6.3,18.6,3.5,12.3,12.3C545.5,63.2,545.2,63.5,545,63.7z"/>
++			<path d="M639.1,42l-11.3-11.3c-1.3-1.3-3.3-1.3-4.7,0l-18.1,18.1c-0.5,0.5-1.4,0.5-1.8,0l-18.1-18.1c-1.3-1.3-3.3-1.3-4.7,0
++				L569.3,42c-1.3,1.3-1.3,3.3,0,4.7l23.2,23.2c0.2,0.2,0.3,0.6,0.3,0.9v33.1c0,1.8,1.5,3.2,3.2,3.2h16.1c1.8,0,3.2-1.5,3.2-3.2v-33
++				c0-0.3,0.1-0.7,0.3-0.9l23.2-23.2C640.3,45.4,640.3,43.3,639.1,42z"/>
++		</g>
++	</g>
++	<g class="st0">
++		<path d="M23,54.1c2,2,3,4.7,3,8.1c0,2.3-0.5,4.4-1.4,6c-0.9,1.7-2.3,2.9-4,3.8c-1.7,0.8-3.6,1.4-5.8,1.4h-8v12.5H0V51.2h14.9
++			C18.3,51.2,21,52.1,23,54.1z M14.1,67.2c1.5,0,2.6-0.5,3.5-1.4c0.9-0.8,1.4-2.1,1.4-3.6c0-1.7-0.5-2.9-1.4-3.7
++			c-0.9-0.8-2.2-1.4-3.5-1.4H6.9v10.1L14.1,67.2L14.1,67.2z"/>
++		<path d="M56.9,52.8c2.7,1.5,4.8,3.5,6.4,6.2s2.3,5.8,2.3,9.4s-0.8,6.8-2.3,9.4c-1.6,2.7-3.6,4.7-6.4,6.2c-2.8,1.4-5.7,2.2-9.3,2.2
++			S41,85.5,38.3,84c-2.7-1.5-4.9-3.5-6.5-6.2c-1.6-2.7-2.3-5.8-2.3-9.4s0.8-6.8,2.3-9.4c1.6-2.7,3.6-4.7,6.5-6.2
++			c2.7-1.5,5.8-2.2,9.3-2.2C51.1,50.6,54.2,51.4,56.9,52.8z M38,74.7c0.9,1.8,2.3,3.1,3.9,4.1c1.7,1,3.5,1.4,5.7,1.4
++			c2.1,0,4.1-0.5,5.6-1.4c1.7-0.9,2.9-2.3,3.9-4.1c0.9-1.8,1.4-3.9,1.4-6.3s-0.5-4.5-1.4-6.3c-0.9-1.8-2.2-3.1-3.9-4.1
++			c-1.7-0.9-3.5-1.4-5.6-1.4c-2.2,0-4.1,0.5-5.7,1.4c-1.7,0.9-2.9,2.3-3.9,4.1c-0.9,1.8-1.4,3.9-1.4,6.3S37.1,72.9,38,74.7z"/>
++		<path d="M92.9,63.1l-7.5,22.6h-5.8L67.5,51.1H75l7.5,23.3l7.5-23.3h5.6l7.5,23.3l7.5-23.3h7.5l-12.1,34.7h-5.8L92.9,63.1z"/>
++		<path d="M129.4,65h13.3v6h-13.3v8.7h15.3v6.1h-22.2V51.2h22.1v6h-15.3L129.4,65L129.4,65z"/>
++		<path d="M150.5,51.2h14.7c3.3,0,6,1,8.1,2.9s3,4.7,3,8.1c0,2.4-0.5,4.4-1.5,6.1c-1,1.7-2.4,2.9-4.2,3.8l7.5,13.7h-7.8l-6.9-12.6
++			h-0.6h-5.4v12.6h-6.9L150.5,51.2L150.5,51.2z M164.3,67.1c1.5,0,2.7-0.5,3.6-1.4c0.9-0.9,1.4-2.1,1.4-3.6c0-1.6-0.5-2.8-1.4-3.6
++			c-0.9-0.8-2.1-1.4-3.6-1.4h-7v9.9L164.3,67.1L164.3,67.1z"/>
++		<path d="M190,65h13.3v6H190v8.7h15.3v6.1h-22.2V51.2h22.1v6H190L190,65L190,65z"/>
++		<path d="M234,53.1c2.6,1.4,4.7,3.4,6.1,6c1.5,2.6,2.3,5.6,2.3,9.3s-0.8,6.7-2.3,9.3c-1.5,2.6-3.5,4.6-6.1,6
++			c-2.6,1.4-5.6,2.1-8.9,2.1H211V51.2h14.2C228.5,51.2,231.5,51.8,234,53.1z M225.3,79.9c3.2,0,5.6-1,7.5-2.9c1.9-2,2.8-4.8,2.8-8.4
++			c0-3.7-0.9-6.6-2.8-8.4c-1.9-2-4.4-2.9-7.5-2.9h-7.4v22.8L225.3,79.9L225.3,79.9z"/>
++		<path d="M281,53.6c2,1.7,2.9,4.1,2.9,7.2c0,1.6-0.3,2.9-0.8,4.1c-0.6,1.1-1.4,2.1-2.3,2.8c1.4,0.6,2.4,1.6,3.2,3
++			c0.8,1.4,1.4,3.1,1.4,5.2c0,3.2-1,5.7-3,7.5s-4.7,2.6-8.1,2.6h-15.4V51.2h14.4C276.4,51.2,279,51.9,281,53.6z M272.8,65.1
++			c1.2,0,2.3-0.3,3-0.9c0.7-0.6,1.1-1.7,1.1-2.9c0-1.4-0.4-2.3-1.2-3c-0.8-0.7-2-1-3.3-1h-6.7v7.8H272.8L272.8,65.1z M273.3,79.7
++			c1.6,0,2.7-0.4,3.6-1.1c0.9-0.7,1.4-1.8,1.4-3.2c0-1.5-0.5-2.6-1.4-3.2c-0.8-0.7-2-1.1-3.5-1.1h-7.8v8.7L273.3,79.7L273.3,79.7z"
++			/>
++		<path d="M300.4,85.7V72.3L287.2,51h8l8.6,14.5l8.7-14.4h8l-13.1,21.3v13.4L300.4,85.7L300.4,85.7z"/>
++	</g>
++	<g>
++		<g>
++			<g>
++				<path class="st1" d="M407.6,104.3L385,69.4c-0.4-0.7-0.4-1.4,0-2l21.2-34.9c0.8-1.3-0.1-3-1.7-3l-13.4,3
++					c-10.6,2.4-13.8,8.6-20.2,17.5c-1.2,1.7-2,2.9-2,2.9c-1,1.8-3.7,1.1-3.7-1V23.2c-8.1,0-12.4,3-15.6,5.7
++					c-10.2,8.4-12.4,18.8-12.4,32v44.4c0,1.1,0.9,2,2,2h24.2c1.1,0,2-0.9,2-2V83.2c0-2,2.6-2.7,3.6-1l8.2,24.2c0.4,0.7,1,1,1.7,1
++					h27.2C407.5,107.2,408.5,105.5,407.6,104.3z M359.7,33.4c-1.5,0-2.7-1.2-2.7-2.7s1.2-2.7,2.7-2.7c1.5,0,2.7,1.2,2.7,2.7
++					C362.3,32.3,361.2,33.4,359.7,33.4z"/>
++			</g>
++			<path class="st2" d="M333.8,48.8c0.2,0.6,2.1-29.7,31.7-30c0,0-24-28.2-32.9-15.6c0,0-4.4,6.9,4.1,9.1c0,0-13.7,3.6-13.5,13.1
++				c0.1,3,3.1,4.9,5.9,3.7c1.6-0.7,3.6-2,6.2-4.4C335.3,24.6,329.3,36.7,333.8,48.8z"/>
++		</g>
++		<path class="st2" d="M368.5,24.4v7.4c0,0.6,0.6,0.9,1,0.6l7.1-4.7l-7.1-3.8C369,23.6,368.5,23.9,368.5,24.4z"/>
++	</g>
++</g>
++</svg>
+diff --git a/public/tenor.svg b/public/tenor.svg
+new file mode 100644
+index 0000000000..bed2e8bc73
+--- /dev/null
++++ b/public/tenor.svg
+@@ -0,0 +1,22 @@
++<?xml version="1.0" encoding="UTF-8" standalone="no"?>
++<svg width="50px" height="14px" viewBox="0 0 1584 447" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
++    <!-- Generator: Sketch 3.8.3 (29802) - http://www.bohemiancoding.com/sketch -->
++    <title>TENOR_VECTOR</title>
++    <desc>Created with Sketch.</desc>
++    <defs></defs>
++    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
++        <g id="TENOR_VECTOR" fill="#007add">
++            <g id="TENOR_GREY">
++                <g id="Layer_1">
++                    <g id="Group">
++                        <path d="M314.8,295.7 C317.2,313.7 322.4,329.8 331.6,344.3 C353.2,378.4 384.6,394.6 424.8,394.3 C457.8,394.1 486.1,382.1 510.5,360.1 C523.3,348.5 541.3,350.7 550.3,364.6 C556.8,374.6 555.5,386.7 546.5,395.7 C519.2,423 486.7,440 448.2,444.7 C423,447.8 397.9,447.2 373.4,439.6 C317.6,422.3 280.5,385.3 264,329.7 C244.7,264.4 255,203.7 300.5,151.5 C331.4,116.2 371.4,99.4 418.5,100.2 C459.1,100.9 494.5,114.7 523,144.2 C546.7,168.7 559.8,198.6 565.8,231.8 C568.1,244.4 569.1,257.2 569.7,270 C570.4,284.1 559.4,295.1 545.3,295.8 C543.3,295.9 541.3,295.8 539.3,295.8 L321.9,295.8 C319.9,295.7 317.8,295.7 314.8,295.7 L314.8,295.7 Z M510,245.4 C508.5,232.4 504.8,220.4 499.9,208.7 C470.7,140 394.8,138.2 355.8,171.7 C335.3,189.3 323.2,211.8 317.2,237.8 C316.6,240.2 316.4,242.6 315.9,245.4 L510,245.4 L510,245.4 Z" id="Shape"></path>
++                        <path d="M970.4,271.3 C970.5,182.9 1039,99.8 1143.8,100 C1241.5,100.1 1316.4,175.8 1316.2,274.2 C1316,370.9 1239.6,446.3 1141.7,446.4 C1047.4,446.4 970.2,367.6 970.4,271.3 L970.4,271.3 Z M1257,275.9 C1256.5,241.6 1246.6,213 1224.9,188.8 C1180.6,139.3 1099.7,141.2 1057.2,192.2 C1021.8,234.7 1019.3,309.7 1060.4,355.9 C1097,397.1 1162.8,405.6 1207.6,373.6 C1241.7,349.2 1256,314.7 1257,275.9 L1257,275.9 Z" id="Shape"></path>
++                        <path d="M683.5,148.6 C689.8,142.6 694.9,137.5 700.2,132.7 C725.8,109.3 756.4,99.7 790.5,100 C817.4,100.3 842.7,106.3 865.1,121.9 C892.9,141.3 908,168.8 913.9,201.5 C915.8,212.1 916.8,223 916.9,233.8 C917.2,295 917,356.1 917,417.3 C917,429 909.6,440.1 898.7,444.1 C887.3,448.3 876.6,446.6 867.8,437.8 C861.6,431.7 858.9,424 858.9,415.2 C859,358.5 859.2,301.9 858.7,245.2 C858.6,234 857,222.5 854.3,211.7 C845.8,178.6 822.1,158.5 788.2,154.6 C764.1,151.8 741.2,155.6 721.1,170.2 C694.4,189.6 683.7,217.2 683.6,249.2 C683.4,305 683.6,360.9 683.5,416.7 C683.5,438.1 662.7,452 642.9,443.9 C632.4,439.6 625.3,428.2 625.3,415.4 L625.3,326.9 L625.3,129.4 C625.3,118.1 630.5,109.5 640.1,103.9 C650,98.1 660.3,98.4 670,104.5 C678.3,109.8 683.3,117.5 683.5,127.7 C683.6,134.3 683.5,140.7 683.5,148.6 L683.5,148.6 Z" id="Shape"></path>
++                        <path d="M124.9,106.8 L131.4,106.8 L203.4,106.8 C214.2,106.8 223,110.3 228.6,120 C237.9,136.3 228.4,156 209.8,158.8 C206.9,159.2 203.8,159.3 200.8,159.3 L131.3,159.3 L124.9,159.3 L124.9,164.9 L124.9,343.4 C124.9,355.4 126.8,366.9 134.9,376.7 C141.5,384.7 150.4,388.1 160.1,389.6 C174.6,391.9 189,390.7 203.1,386.3 C216.5,382 229.7,388 234.2,400.5 C238.8,413.2 232.3,425.7 219.9,431.7 C203.1,439.9 185.5,443.5 166.9,444.5 C118.7,446.9 75.4,411.9 68.1,364.1 C67.1,357.9 66.8,351.5 66.8,345.2 C66.7,285.7 66.7,226.2 66.7,166.7 L66.7,159.8 C64.5,159.7 62.7,159.5 61,159.5 C50,159.5 39,159.7 28,159.4 C10,158.9 -1.6,145.4 1.1,128.4 C3,116.4 13.9,107.4 27.6,107 C38.4,106.7 49.3,106.9 60.1,106.9 C66.7,106.9 66.7,106.9 66.7,100 L66.7,30.5 C66.7,13.5 79,0.5 95.4,0.3 C111.8,0.1 124.7,13.2 124.8,30.4 C124.9,53.7 124.8,77.1 124.8,100.4 C124.9,102.3 124.9,104.3 124.9,106.8 L124.9,106.8 Z" id="Shape"></path>
++                        <path d="M1432.4,170.1 C1441,160.3 1448.6,150.6 1457.4,142 C1477.5,122.4 1501.1,108.7 1528.9,103.2 C1537.3,101.5 1546.1,101.1 1554.7,101.5 C1571,102.4 1583.2,116 1583.2,132 C1583.2,147.8 1570.8,161.2 1554.7,162.7 C1542.8,163.8 1530.7,164 1519,166.5 C1486.9,173.4 1464.2,192.8 1449.6,221.9 C1436.8,247.3 1432.5,274.7 1432.4,302.8 C1432.2,340.3 1432.4,377.8 1432.4,415.3 C1432.4,432.7 1419.6,446.2 1403.1,446.1 C1386.5,446 1374,433.1 1374,415.7 L1374,128.8 C1374,115.8 1383.2,104 1395.6,100.9 C1409.2,97.5 1422.4,103.1 1428.3,115.6 C1430.6,120.4 1431.9,126 1432.1,131.4 C1432.7,142.5 1432.3,153.7 1432.3,164.9 C1432.4,166.6 1432.4,168.2 1432.4,170.1 L1432.4,170.1 Z" id="Shape"></path>
++                    </g>
++                </g>
++            </g>
++        </g>
++    </g>
++</svg>
+\ No newline at end of file

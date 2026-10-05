@@ -1,0 +1,4524 @@
+From ad17528263c284d59dd476beb7b6e6738b12415d Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Tue, 6 Oct 2026 01:07:08 +0700
+Subject: [PATCH 1/5] feature/reaction-list: emoji reactions backend + frontend
+ (Essem, rebased onto latest glitch-soc)
+
+---
+ .env.production.sample                        |   3 +
+ .../api/v1/statuses/reactions_controller.rb   | 112 +++++++++++
+ app/helpers/context_helper.rb                 |   1 +
+ .../flavours/glitch/actions/interactions.js   | 176 ++++++++++++++++++
+ .../glitch/actions/notification_groups.ts     |   2 +-
+ .../glitch/api_types/notifications.ts         |  21 ++-
+ .../flavours/glitch/api_types/reaction.ts     |  11 ++
+ .../flavours/glitch/api_types/statuses.ts     |   4 +
+ .../glitch/components/account/index.tsx       |  24 ++-
+ .../glitch/components/avatar_overlay.tsx      |  61 ++++--
+ .../status/legacy/action_bar/index.jsx        |  13 +-
+ .../components/status/legacy/container.js     |  21 ++-
+ .../components/status/legacy/prepend.jsx      |  17 ++
+ .../components/status/legacy/reactions.tsx    | 131 +++++++++++++
+ .../components/status/legacy/status.jsx       |  18 +-
+ .../components/emoji_picker_dropdown.jsx      |  23 ++-
+ .../flavours/glitch/features/emoji/utils.ts   |   2 +-
+ .../components/column_settings.jsx            |  13 +-
+ .../notifications/components/notification.jsx |  31 ++-
+ .../features/notifications/requests.jsx       |   2 +-
+ .../components/notification_group.tsx         |   9 +
+ .../components/notification_reaction.tsx      | 107 +++++++++++
+ .../features/notifications_v2/filter_bar.tsx  |  13 ++
+ .../glitch/features/reactions/index.tsx       | 156 ++++++++++++++++
+ .../features/status/components/action_bar.jsx |  17 +-
+ .../status/components/detailed_status.tsx     |  29 ++-
+ .../features/ui/util/async-components.js      |   8 +
+ .../flavours/glitch/initial_state.ts          |   8 +
+ .../flavours/glitch/locales/en.json           |  18 ++
+ .../glitch/models/notification_group.ts       |  30 +++
+ .../flavours/glitch/models/reaction.ts        |   8 +
+ .../flavours/glitch/reducers/index.ts         |   2 +
+ .../flavours/glitch/reducers/settings.js      |   3 +
+ .../glitch/reducers/status_reactions.js       |  58 ++++++
+ .../flavours/glitch/reducers/statuses.js      |  50 +++++
+ .../images/mailer-new/heading/reaction.png    | Bin 0 -> 5759 bytes
+ app/javascript/images/mailer/icon_add.png     | Bin 0 -> 1417 bytes
+ .../status/legacy/action_bar/index.jsx        |   1 +
+ .../notifications/components/notification.jsx |   4 +-
+ .../features/notifications/requests.jsx       |   2 +-
+ .../features/status/components/action_bar.jsx |   1 +
+ .../400-24px/add_reaction-fill.svg            |   1 +
+ .../material-icons/400-24px/add_reaction.svg  |   1 +
+ app/lib/activitypub/activity.rb               |  30 +++
+ app/lib/activitypub/activity/emoji_react.rb   |  28 +++
+ app/lib/activitypub/activity/like.rb          |  31 ++-
+ app/lib/activitypub/activity/undo.rb          |  29 +++
+ app/lib/emoji.rb                              |  17 ++
+ app/lib/status_cache_hydrator.rb              |  11 ++
+ app/mailers/notification_mailer.rb            |  12 +-
+ app/models/concerns/account/associations.rb   |   1 +
+ app/models/concerns/account/interactions.rb   |   4 +
+ app/models/concerns/notification/groups.rb    |   4 +-
+ app/models/concerns/user/has_settings.rb      |  14 ++
+ app/models/notification.rb                    |  14 +-
+ app/models/notification_group.rb              |   1 +
+ app/models/status.rb                          |  31 ++-
+ app/models/status_reaction.rb                 |  77 ++++++++
+ app/models/status_stat.rb                     |   5 +
+ app/models/user_settings.rb                   |   2 +
+ app/policies/status_policy.rb                 |   4 +
+ app/presenters/status_reaction_presenter.rb   |   5 +
+ .../status_relationships_presenter.rb         |  19 +-
+ .../activitypub/emoji_reaction_serializer.rb  |  41 ++++
+ .../undo_emoji_reaction_serializer.rb         |  19 ++
+ app/serializers/initial_state_serializer.rb   |  18 +-
+ app/serializers/rest/instance_serializer.rb   |   7 +
+ .../rest/notification_group_serializer.rb     |   7 +-
+ .../rest/notification_serializer.rb           |   7 +-
+ .../rest/status_reaction_serializer.rb        |  59 ++++++
+ app/serializers/rest/status_serializer.rb     |  15 +-
+ .../rest/v1/instance_serializer.rb            |   5 +
+ app/services/delete_account_service.rb        |  11 ++
+ app/services/react_service.rb                 |  46 +++++
+ app/services/unreact_service.rb               |  27 +++
+ app/validators/status_reaction_validator.rb   |  28 +++
+ .../notification_mailer/reaction.html.haml    |  16 ++
+ .../notification_mailer/reaction.text.erb     |   5 +
+ .../preferences/appearance/show.html.haml     |   3 +
+ .../preferences/notifications/show.html.haml  |   1 +
+ app/workers/unreact_worker.rb                 |  11 ++
+ config/locales-glitch/en.yml                  |   9 +
+ config/locales-glitch/simple_form.en.yml      |   5 +
+ config/routes/api.rb                          |   7 +
+ .../20221124114030_create_status_reactions.rb |  16 ++
+ ...44156_add_reaction_count_to_status_stat.rb |   7 +
+ ...3754_add_reaction_counts_to_status_stat.rb |  21 +++
+ ...ize_status_reaction_variation_selectors.rb |  13 ++
+ lib/mastodon/cli/cache.rb                     |   1 +
+ .../fabricators/status_reaction_fabricator.rb |   8 +
+ .../activitypub/activity/emoji_react_spec.rb  | 107 +++++++++++
+ spec/lib/activitypub/activity/like_spec.rb    | 116 ++++++++++--
+ spec/lib/activitypub/activity/undo_spec.rb    | 115 ++++++++++--
+ spec/mailers/notification_mailer_spec.rb      |  24 +++
+ spec/models/status_reaction_spec.rb           |   3 +
+ .../api/v1/statuses/reactions_spec.rb         | 153 +++++++++++++++
+ .../api/web/push_subscriptions_spec.rb        |   1 +
+ 97 files changed, 2391 insertions(+), 92 deletions(-)
+ create mode 100644 app/controllers/api/v1/statuses/reactions_controller.rb
+ create mode 100644 app/javascript/flavours/glitch/api_types/reaction.ts
+ create mode 100644 app/javascript/flavours/glitch/components/status/legacy/reactions.tsx
+ create mode 100644 app/javascript/flavours/glitch/features/notifications_v2/components/notification_reaction.tsx
+ create mode 100644 app/javascript/flavours/glitch/features/reactions/index.tsx
+ create mode 100644 app/javascript/flavours/glitch/models/reaction.ts
+ create mode 100644 app/javascript/flavours/glitch/reducers/status_reactions.js
+ create mode 100644 app/javascript/images/mailer-new/heading/reaction.png
+ create mode 100644 app/javascript/images/mailer/icon_add.png
+ create mode 100644 app/javascript/material-icons/400-24px/add_reaction-fill.svg
+ create mode 100644 app/javascript/material-icons/400-24px/add_reaction.svg
+ create mode 100644 app/lib/activitypub/activity/emoji_react.rb
+ create mode 100644 app/lib/emoji.rb
+ create mode 100644 app/models/status_reaction.rb
+ create mode 100644 app/presenters/status_reaction_presenter.rb
+ create mode 100644 app/serializers/activitypub/emoji_reaction_serializer.rb
+ create mode 100644 app/serializers/activitypub/undo_emoji_reaction_serializer.rb
+ create mode 100644 app/serializers/rest/status_reaction_serializer.rb
+ create mode 100644 app/services/react_service.rb
+ create mode 100644 app/services/unreact_service.rb
+ create mode 100644 app/validators/status_reaction_validator.rb
+ create mode 100644 app/views/notification_mailer/reaction.html.haml
+ create mode 100644 app/views/notification_mailer/reaction.text.erb
+ create mode 100644 app/workers/unreact_worker.rb
+ create mode 100644 db/migrate/20221124114030_create_status_reactions.rb
+ create mode 100644 db/migrate/20240411044156_add_reaction_count_to_status_stat.rb
+ create mode 100644 db/post_migrate/20250305023754_add_reaction_counts_to_status_stat.rb
+ create mode 100644 db/post_migrate/20260520184138_normalize_status_reaction_variation_selectors.rb
+ create mode 100644 spec/fabricators/status_reaction_fabricator.rb
+ create mode 100644 spec/lib/activitypub/activity/emoji_react_spec.rb
+ create mode 100644 spec/models/status_reaction_spec.rb
+ create mode 100644 spec/requests/api/v1/statuses/reactions_spec.rb
+
+diff --git a/.env.production.sample b/.env.production.sample
+index e341c07801..3a01c04c90 100644
+--- a/.env.production.sample
++++ b/.env.production.sample
+@@ -283,6 +283,9 @@ MAX_POLL_OPTIONS=5
+ # Maximum allowed poll option characters
+ MAX_POLL_OPTION_CHARS=100
+ 
++# Maximum number of emoji reactions per toot and user (minimum 1)
++MAX_REACTIONS=1
++
+ # Maximum image and video/audio upload sizes
+ # Units are in bytes
+ # 1048576 bytes equals 1 megabyte
+diff --git a/app/controllers/api/v1/statuses/reactions_controller.rb b/app/controllers/api/v1/statuses/reactions_controller.rb
+new file mode 100644
+index 0000000000..c8da7fceaf
+--- /dev/null
++++ b/app/controllers/api/v1/statuses/reactions_controller.rb
+@@ -0,0 +1,112 @@
++# frozen_string_literal: true
++
++class Api::V1::Statuses::ReactionsController < Api::V1::Statuses::BaseController
++  REACTIONS_LIMIT = 30
++
++  before_action -> { doorkeeper_authorize! :write, :'write:favourites' }, only: [:create, :destroy]
++  before_action -> { authorize_if_got_token! :read, :'read:accounts' }, only: [:index]
++  before_action :require_user!, only: [:create, :destroy]
++  skip_before_action :set_status, only: [:destroy]
++  after_action :insert_pagination_headers, only: [:index]
++
++  def index
++    cache_if_unauthenticated!
++    @reactions = set_reactions
++    render json: @reactions, each_serializer: REST::StatusReactionSerializer, include_account: true, exclude_count: true
++  end
++
++  def create
++    ReactService.new.call(current_account, @status, Emoji.normalize(params[:id]))
++    render json: @status, serializer: REST::StatusSerializer
++  end
++
++  def destroy
++    name = Emoji.normalize(params[:id])
++    react = current_account.status_reactions.find_by(status_id: params[:status_id], name: name)
++
++    if react
++      @status = react.status
++      count = [@status.reactions_count - 1, 0].max
++      reactions = select_reactions.where.not(id: react.id)
++      UnreactWorker.perform_async(current_account.id, @status.id, name)
++    else
++      @status = Status.find(params[:status_id])
++      reactions = select_reactions
++      count = @status.reactions_count
++      authorize @status, :show?
++    end
++
++    reactions = reactions.group(:status_id, :name, :custom_emoji_id).order(Arel.sql('MIN(created_at)').asc).to_a
++
++    relationships = StatusRelationshipsPresenter.new([@status], current_account.id, reactions_map: { @status.id => reactions }, attributes_map: { @status.id => { reactions_count: count } })
++    render json: @status, serializer: REST::StatusSerializer, relationships: relationships
++  rescue ActiveRecord::RecordNotFound, Mastodon::NotPermittedError
++    not_found
++  end
++
++  private
++
++  def select_reactions
++    StatusReaction.select(
++      [:name, :custom_emoji_id, 'COUNT(*) as count', 'FALSE AS me']
++    ).where(status_id: @status.id)
++  end
++
++  def set_reactions
++    ordered_reactions.select(
++      [:id, :account_id, :name, :custom_emoji_id].tap do |values|
++        values << StatusReaction.value_for_reaction_me_column(current_account&.id)
++      end
++    ).to_a_paginated_by_id(
++      limit_param(REACTIONS_LIMIT),
++      params_slice(:max_id, :since_id, :min_id)
++    )
++  end
++
++  def ordered_reactions
++    filtered_reactions.group(:status_id, :id, :account_id, :name, :custom_emoji_id)
++  end
++
++  def filtered_reactions
++    initial_reactions = StatusReaction.where(status: @status)
++    initial_reactions = initial_reactions.not_by_excluded_account(current_account) unless current_account.nil?
++    if filtered?
++      emoji, domain = params[:emoji].split('@')
++      initial_reactions.where(name: emoji).left_outer_joins(:custom_emoji).where(custom_emoji: { domain: domain })
++    else
++      initial_reactions
++    end
++  end
++
++  def filtered?
++    params[:emoji].present?
++  end
++
++  def insert_pagination_headers
++    set_pagination_headers(next_path, prev_path)
++  end
++
++  def next_path
++    api_v1_status_reactions_url pagination_params(max_id: pagination_max_id) if records_continue?
++  end
++
++  def prev_path
++    api_v1_status_reactions_url pagination_params(since_id: pagination_since_id) unless @reactions.empty?
++  end
++
++  def pagination_max_id
++    @reactions.last.id
++  end
++
++  def pagination_since_id
++    @reactions.first.id
++  end
++
++  def records_continue?
++    @reactions.size == limit_param(REACTIONS_LIMIT)
++  end
++
++  def pagination_params(core_params)
++    params_slice(:limit, :emoji).merge(core_params)
++  end
++end
+diff --git a/app/helpers/context_helper.rb b/app/helpers/context_helper.rb
+index 6499da7240..e6ba07e3c3 100644
+--- a/app/helpers/context_helper.rb
++++ b/app/helpers/context_helper.rb
+@@ -16,6 +16,7 @@ module ContextHelper
+     moved_to: { 'movedTo' => { '@id' => 'as:movedTo', '@type' => '@id' } },
+     also_known_as: { 'alsoKnownAs' => { '@id' => 'as:alsoKnownAs', '@type' => '@id' } },
+     emoji: { 'toot' => 'http://joinmastodon.org/ns#', 'Emoji' => 'toot:Emoji' },
++    emoji_react: { 'litepub' => 'http://litepub.social/ns#', 'EmojiReact' => 'litepub:EmojiReact' },
+     featured: { 'toot' => 'http://joinmastodon.org/ns#', 'featured' => { '@id' => 'toot:featured', '@type' => '@id' }, 'featuredTags' => { '@id' => 'toot:featuredTags', '@type' => '@id' } },
+     property_value: { 'schema' => 'http://schema.org#', 'PropertyValue' => 'schema:PropertyValue', 'value' => 'schema:value' },
+     atom_uri: { 'ostatus' => 'http://ostatus.org#', 'atomUri' => 'ostatus:atomUri' },
+diff --git a/app/javascript/flavours/glitch/actions/interactions.js b/app/javascript/flavours/glitch/actions/interactions.js
+index 68be9a9db6..112a621951 100644
+--- a/app/javascript/flavours/glitch/actions/interactions.js
++++ b/app/javascript/flavours/glitch/actions/interactions.js
+@@ -11,6 +11,10 @@ import {
+   removePinnedStatusFromTimelines,
+ } from './timelines_typed';
+ 
++export const REACTIONS_EXPAND_REQUEST = 'REACTIONS_EXPAND_REQUEST';
++export const REACTIONS_EXPAND_SUCCESS = 'REACTIONS_EXPAND_SUCCESS';
++export const REACTIONS_EXPAND_FAIL    = 'REACTIONS_EXPAND_FAIL';
++
+ export const REBLOGS_EXPAND_REQUEST = 'REBLOGS_EXPAND_REQUEST';
+ export const REBLOGS_EXPAND_SUCCESS = 'REBLOGS_EXPAND_SUCCESS';
+ export const REBLOGS_EXPAND_FAIL = 'REBLOGS_EXPAND_FAIL';
+@@ -23,6 +27,10 @@ export const UNFAVOURITE_REQUEST = 'UNFAVOURITE_REQUEST';
+ export const UNFAVOURITE_SUCCESS = 'UNFAVOURITE_SUCCESS';
+ export const UNFAVOURITE_FAIL    = 'UNFAVOURITE_FAIL';
+ 
++export const REACTIONS_FETCH_REQUEST = 'REACTIONS_FETCH_REQUEST';
++export const REACTIONS_FETCH_SUCCESS = 'REACTIONS_FETCH_SUCCESS';
++export const REACTIONS_FETCH_FAIL    = 'REACTIONS_FETCH_FAIL';
++
+ export const REBLOGS_FETCH_REQUEST = 'REBLOGS_FETCH_REQUEST';
+ export const REBLOGS_FETCH_SUCCESS = 'REBLOGS_FETCH_SUCCESS';
+ export const REBLOGS_FETCH_FAIL    = 'REBLOGS_FETCH_FAIL';
+@@ -51,6 +59,16 @@ export const UNBOOKMARK_REQUEST = 'UNBOOKMARKED_REQUEST';
+ export const UNBOOKMARK_SUCCESS = 'UNBOOKMARKED_SUCCESS';
+ export const UNBOOKMARK_FAIL    = 'UNBOOKMARKED_FAIL';
+ 
++export const REACTION_UPDATE = 'REACTION_UPDATE';
++
++export const REACTION_ADD_REQUEST = 'REACTION_ADD_REQUEST';
++export const REACTION_ADD_SUCCESS = 'REACTION_ADD_SUCCESS';
++export const REACTION_ADD_FAIL    = 'REACTION_ADD_FAIL';
++
++export const REACTION_REMOVE_REQUEST = 'REACTION_REMOVE_REQUEST';
++export const REACTION_REMOVE_SUCCESS = 'REACTION_REMOVE_SUCCESS';
++export const REACTION_REMOVE_FAIL    = 'REACTION_REMOVE_FAIL';
++
+ export * from "./interactions_typed";
+ 
+ export function favourite(status) {
+@@ -201,6 +219,90 @@ export function unbookmarkFail(status, error) {
+   };
+ }
+ 
++export function fetchReactions(id) {
++  return (dispatch, getState) => {
++    dispatch(fetchReactionsRequest(id));
++
++    api(getState).get(`/api/v1/statuses/${id}/reactions`).then(response => {
++      const next = getLinks(response).refs.find(link => link.rel === 'next');
++      const accounts = response.data.map(item => item.account);
++      dispatch(importFetchedAccounts(accounts));
++      dispatch(fetchReactionsSuccess(id, response.data, next ? next.uri : null));
++      dispatch(fetchRelationships(accounts.map(item => item.id)));
++    }).catch(error => {
++      dispatch(fetchReactionsFail(id, error));
++    });
++  };
++}
++
++export function fetchReactionsRequest(id) {
++  return {
++    type: REACTIONS_FETCH_REQUEST,
++    id,
++  };
++}
++
++export function fetchReactionsSuccess(id, reactions, next) {
++  return {
++    type: REACTIONS_FETCH_SUCCESS,
++    id,
++    reactions,
++    next,
++  };
++}
++
++export function fetchReactionsFail(id, error) {
++  return {
++    type: REACTIONS_FETCH_FAIL,
++    id,
++    error,
++  };
++}
++
++export function expandReactions(id) {
++  return (dispatch, getState) => {
++    const url = getState().getIn(['status_reactions', 'reactions', id, 'next']);
++    if (url === null) {
++      return;
++    }
++
++    dispatch(expandReactionsRequest(id));
++
++    api(getState).get(url).then(response => {
++      const next = getLinks(response).refs.find(link => link.rel === 'next');
++      const accounts = response.data.map(item => item.account);
++
++      dispatch(importFetchedAccounts(accounts));
++      dispatch(expandReactionsSuccess(id, response.data, next ? next.uri : null));
++      dispatch(fetchRelationships(accounts.map(item => item.id)));
++    }).catch(error => dispatch(expandReactionsFail(id, error)));
++  };
++}
++
++export function expandReactionsRequest(id) {
++  return {
++    type: REACTIONS_EXPAND_REQUEST,
++    id,
++  };
++}
++
++export function expandReactionsSuccess(id, reactions, next) {
++  return {
++    type: REACTIONS_EXPAND_SUCCESS,
++    id,
++    reactions,
++    next,
++  };
++}
++
++export function expandReactionsFail(id, error) {
++  return {
++    type: REACTIONS_EXPAND_FAIL,
++    id,
++    error,
++  };
++}
++
+ export function fetchReblogs(id) {
+   return (dispatch) => {
+     dispatch(fetchReblogsRequest(id));
+@@ -500,3 +602,77 @@ export function toggleFavourite(statusId, skipModal = false) {
+     }
+   };
+ }
++
++export const addReaction = (statusId, name, url) => (dispatch, getState) => {
++  const status = getState().get('statuses').get(statusId);
++  let alreadyAdded = false;
++  if (status) {
++    const reaction = status.get('reactions').find(x => x.get('name') === name);
++    if (reaction && reaction.get('me')) {
++      alreadyAdded = true;
++    }
++  }
++  if (!alreadyAdded) {
++    dispatch(addReactionRequest(statusId, name, url));
++  }
++
++  // encodeURIComponent is required for the Keycap Number Sign emoji, see:
++  // <https://github.com/glitch-soc/mastodon/pull/1980#issuecomment-1345538932>
++  api(getState).post(`/api/v1/statuses/${statusId}/react/${encodeURIComponent(name)}`).then((response) => {
++    dispatch(importFetchedStatus(response.data));
++    dispatch(addReactionSuccess(statusId, name));
++  }).catch(err => {
++    if (!alreadyAdded) {
++      dispatch(addReactionFail(statusId, name, err));
++    }
++  });
++};
++
++export const addReactionRequest = (statusId, name, url) => ({
++  type: REACTION_ADD_REQUEST,
++  id: statusId,
++  name,
++  url,
++});
++
++export const addReactionSuccess = (statusId, name) => ({
++  type: REACTION_ADD_SUCCESS,
++  id: statusId,
++  name,
++});
++
++export const addReactionFail = (statusId, name, error) => ({
++  type: REACTION_ADD_FAIL,
++  id: statusId,
++  name,
++  error,
++});
++
++export const removeReaction = (statusId, name) => (dispatch, getState) => {
++  dispatch(removeReactionRequest(statusId, name));
++
++  api(getState).post(`/api/v1/statuses/${statusId}/unreact/${encodeURIComponent(name)}`).then((response) => {
++    dispatch(importFetchedStatus(response.data));
++    dispatch(removeReactionSuccess(statusId, name));
++  }).catch(err => {
++    dispatch(removeReactionFail(statusId, name, err));
++  });
++};
++
++export const removeReactionRequest = (statusId, name) => ({
++  type: REACTION_REMOVE_REQUEST,
++  id: statusId,
++  name,
++});
++
++export const removeReactionSuccess = (statusId, name) => ({
++  type: REACTION_REMOVE_SUCCESS,
++  id: statusId,
++  name,
++});
++
++export const removeReactionFail = (statusId, name) => ({
++  type: REACTION_REMOVE_FAIL,
++  id: statusId,
++  name,
++});
+diff --git a/app/javascript/flavours/glitch/actions/notification_groups.ts b/app/javascript/flavours/glitch/actions/notification_groups.ts
+index ea37c4e0ce..ca9fcc85aa 100644
+--- a/app/javascript/flavours/glitch/actions/notification_groups.ts
++++ b/app/javascript/flavours/glitch/actions/notification_groups.ts
+@@ -104,7 +104,7 @@ function dispatchAssociatedRecords(
+ }
+ 
+ function selectNotificationGroupedTypes(state: RootState) {
+-  const types: NotificationType[] = ['favourite', 'reblog'];
++  const types: NotificationType[] = ['favourite', 'reblog', 'reaction'];
+ 
+   if (selectSettingsNotificationsGroupFollows(state)) types.push('follow');
+ 
+diff --git a/app/javascript/flavours/glitch/api_types/notifications.ts b/app/javascript/flavours/glitch/api_types/notifications.ts
+index faa0078693..07c1f4d8fa 100644
+--- a/app/javascript/flavours/glitch/api_types/notifications.ts
++++ b/app/javascript/flavours/glitch/api_types/notifications.ts
+@@ -4,6 +4,7 @@ import type { AccountWarningAction } from 'flavours/glitch/models/notification_g
+ 
+ import type { ApiAccountJSON } from './accounts';
+ import type { ApiCollectionJSON } from './collections';
++import type { ApiStatusReactionJSON } from './reaction';
+ import type { ApiReportJSON } from './reports';
+ import type { ApiStatusJSON } from './statuses';
+ 
+@@ -12,6 +13,7 @@ export const allNotificationTypes: NotificationType[] = [
+   'follow',
+   'follow_request',
+   'favourite',
++  'reaction',
+   'reblog',
+   'mention',
+   'quote',
+@@ -39,6 +41,7 @@ export type NotificationWithStatusType =
+ 
+ export type NotificationType =
+   | NotificationWithStatusType
++  | 'reaction'
+   | 'follow'
+   | 'follow_request'
+   | 'moderation_warning'
+@@ -137,6 +140,12 @@ interface ModerationWarningNotificationJSON extends BaseNotificationJSON {
+   moderation_warning: ApiAccountWarningJSON;
+ }
+ 
++interface ReactionNotificationJSON extends BaseNotificationJSON {
++  type: 'reaction';
++  status: ApiStatusJSON | null;
++  reaction: ApiStatusReactionJSON;
++}
++
+ export interface ApiAccountRelationshipSeveranceEventJSON {
+   id: string;
+   type: 'account_suspension' | 'domain_block' | 'user_domain_block';
+@@ -166,6 +175,12 @@ interface AnnualReportNotificationGroupJSON extends BaseNotificationGroupJSON {
+   annual_report: ApiAnnualReportEventJSON;
+ }
+ 
++interface ReactionNotificationGroupJSON extends BaseNotificationGroupJSON {
++  type: 'reaction';
++  status_id: string | null;
++  reaction?: ApiStatusReactionJSON;
++}
++
+ export type ApiNotificationJSON =
+   | SimpleNotificationJSON
+   | ReportNotificationJSON
+@@ -173,7 +188,8 @@ export type ApiNotificationJSON =
+   | NotificationWithStatusJSON
+   | ModerationWarningNotificationJSON
+   | AddedToCollectionNotificationJSON
+-  | CollectionUpdateNotificationJSON;
++  | CollectionUpdateNotificationJSON
++  | ReactionNotificationJSON;
+ 
+ export type ApiNotificationGroupJSON =
+   | SimpleNotificationGroupJSON
+@@ -183,7 +199,8 @@ export type ApiNotificationGroupJSON =
+   | ModerationWarningNotificationGroupJSON
+   | AnnualReportNotificationGroupJSON
+   | AddedToCollectionNotificationGroupJSON
+-  | CollectionUpdateNotificationGroupJSON;
++  | CollectionUpdateNotificationGroupJSON
++  | ReactionNotificationGroupJSON;
+ 
+ export interface ApiNotificationGroupsResultJSON {
+   accounts: ApiAccountJSON[];
+diff --git a/app/javascript/flavours/glitch/api_types/reaction.ts b/app/javascript/flavours/glitch/api_types/reaction.ts
+new file mode 100644
+index 0000000000..7dc0862d91
+--- /dev/null
++++ b/app/javascript/flavours/glitch/api_types/reaction.ts
+@@ -0,0 +1,11 @@
++import type { ApiAccountJSON } from './accounts';
++
++export interface ApiStatusReactionJSON {
++  id?: string;
++  name: string;
++  static_url?: string | undefined;
++  url?: string | undefined;
++  count?: number;
++  me?: boolean;
++  account?: ApiAccountJSON;
++}
+diff --git a/app/javascript/flavours/glitch/api_types/statuses.ts b/app/javascript/flavours/glitch/api_types/statuses.ts
+index acf192c12d..564ca2f025 100644
+--- a/app/javascript/flavours/glitch/api_types/statuses.ts
++++ b/app/javascript/flavours/glitch/api_types/statuses.ts
+@@ -6,6 +6,7 @@ import type { ApiCustomEmojiJSON } from './custom_emoji';
+ import type { ApiMediaAttachmentJSON } from './media_attachments';
+ import type { ApiPollJSON } from './polls';
+ import type { ApiQuoteJSON, ApiQuotePolicyJSON } from './quotes';
++import type { ApiStatusReactionJSON } from './reaction';
+ 
+ // See app/modals/status.rb
+ export type StatusVisibility =
+@@ -127,6 +128,9 @@ export interface ApiStatusJSON {
+   // glitch-soc additions
+   local_only?: boolean;
+   content_type?: string;
++
++  reactions_count: number;
++  reactions: ApiStatusReactionJSON[];
+ }
+ 
+ export interface ApiContextJSON {
+diff --git a/app/javascript/flavours/glitch/components/account/index.tsx b/app/javascript/flavours/glitch/components/account/index.tsx
+index c3a83895fa..f73235c0bd 100644
+--- a/app/javascript/flavours/glitch/components/account/index.tsx
++++ b/app/javascript/flavours/glitch/components/account/index.tsx
+@@ -20,11 +20,13 @@ import { openModal } from 'flavours/glitch/actions/modal';
+ import { initMuteModal } from 'flavours/glitch/actions/mutes';
+ import { apiFollowAccount } from 'flavours/glitch/api/accounts';
+ import { Avatar } from 'flavours/glitch/components/avatar';
++import { AvatarOverlay } from 'flavours/glitch/components/avatar_overlay';
+ import { VerifiedBadge } from 'flavours/glitch/components/badge';
+ import { Button } from 'flavours/glitch/components/button';
+ import { FollowersCounter } from 'flavours/glitch/components/counters';
+ import { DisplayName } from 'flavours/glitch/components/display_name';
+ import { Dropdown } from 'flavours/glitch/components/dropdown_menu';
++import { AnimateEmojiProvider } from 'flavours/glitch/components/emoji/context';
+ import { FollowButton } from 'flavours/glitch/components/follow_button';
+ import { RelativeTimestamp } from 'flavours/glitch/components/relative_timestamp';
+ import { ShortNumber } from 'flavours/glitch/components/short_number';
+@@ -32,6 +34,7 @@ import { Skeleton } from 'flavours/glitch/components/skeleton';
+ import { useIdentity } from 'flavours/glitch/identity_context';
+ import { me } from 'flavours/glitch/initial_state';
+ import type { MenuItem } from 'flavours/glitch/models/dropdown_menu';
++import type { StatusReaction } from 'flavours/glitch/models/reaction';
+ import { useAppSelector, useAppDispatch } from 'flavours/glitch/store';
+ 
+ import { Permalink } from '../permalink';
+@@ -68,6 +71,7 @@ const messages = defineMessages({
+ 
+ interface AccountProps {
+   size?: number;
++  overlayEmoji?: StatusReaction;
+   id: string;
+   hidden?: boolean;
+   minimal?: boolean;
+@@ -84,6 +88,7 @@ interface AccountProps {
+ export const Account: React.FC<AccountProps> = ({
+   id,
+   size = 46,
++  overlayEmoji = { name: null },
+   hidden,
+   minimal,
+   defaultAction,
+@@ -294,6 +299,13 @@ export const Account: React.FC<AccountProps> = ({
+     verification = <VerifiedBadge link={firstVerifiedField.value} />;
+   }
+ 
++  let statusAvatar;
++  if (!overlayEmoji.name) {
++    statusAvatar = <Avatar account={account} size={size} />;
++  } else {
++    statusAvatar = <AvatarOverlay account={account} emoji={overlayEmoji} />;
++  }
++
+   return (
+     <div
+       className={classNames('account', className, {
+@@ -316,11 +328,13 @@ export const Account: React.FC<AccountProps> = ({
+             data-hover-card-reference={reference}
+           >
+             <div className='account__avatar-wrapper'>
+-              {account ? (
+-                <Avatar account={account} size={size} />
+-              ) : (
+-                <Skeleton width={size} height={size} />
+-              )}
++              <AnimateEmojiProvider>
++                {account ? (
++                  statusAvatar
++                ) : (
++                  <Skeleton width={size} height={size} />
++                )}
++              </AnimateEmojiProvider>
+             </div>
+ 
+             <div className='account__contents'>
+diff --git a/app/javascript/flavours/glitch/components/avatar_overlay.tsx b/app/javascript/flavours/glitch/components/avatar_overlay.tsx
+index 2aef355f7e..aebeb99a4e 100644
+--- a/app/javascript/flavours/glitch/components/avatar_overlay.tsx
++++ b/app/javascript/flavours/glitch/components/avatar_overlay.tsx
+@@ -1,6 +1,10 @@
++import { Emoji } from 'flavours/glitch/components/emoji';
++import { CustomEmojiProvider } from 'flavours/glitch/components/emoji/context';
++import { isUnicodeEmoji } from 'flavours/glitch/features/emoji/utils';
+ import { useHovering } from 'flavours/glitch/hooks/useHovering';
+ import { autoPlayGif } from 'flavours/glitch/initial_state';
+ import type { Account, AccountShapeFull } from 'flavours/glitch/models/account';
++import type { StatusReaction } from 'flavours/glitch/models/reaction';
+ 
+ type AvatarAccount = Pick<
+   Account | AccountShapeFull,
+@@ -10,6 +14,7 @@ type AvatarAccount = Pick<
+ interface Props {
+   account?: AvatarAccount;
+   friend?: AvatarAccount;
++  emoji?: StatusReaction;
+   size?: number;
+   baseSize?: number;
+   overlaySize?: number;
+@@ -26,6 +31,7 @@ const handleImgLoadError = (error: { currentTarget: HTMLElement }) => {
+ export const AvatarOverlay: React.FC<Props> = ({
+   account,
+   friend,
++  emoji,
+   size = 46,
+   baseSize = 36,
+   overlaySize = 24,
+@@ -35,6 +41,45 @@ export const AvatarOverlay: React.FC<Props> = ({
+   const accountSrc = hovering ? account?.avatar : account?.avatar_static;
+   const friendSrc = hovering ? friend?.avatar : friend?.avatar_static;
+ 
++  let overlayElement;
++  if (friendSrc) {
++    overlayElement = (
++      <div
++        className='account__avatar'
++        style={{ width: `${overlaySize}px`, height: `${overlaySize}px` }}
++        data-avatar-of={`@${friend?.acct}`}
++      >
++        {friendSrc && (
++          <img
++            src={friendSrc}
++            alt={friend?.acct}
++            onError={handleImgLoadError}
++          />
++        )}
++      </div>
++    );
++  } else if (emoji) {
++    const code = isUnicodeEmoji(emoji.name) ? emoji.name : `:${emoji.name}:`;
++    let custom;
++    if (emoji.url) {
++      custom = {
++        [emoji.name]: {
++          shortcode: emoji.name,
++          static_url: emoji.static_url,
++          url: emoji.url,
++        },
++      };
++    }
++
++    overlayElement = (
++      <div className='account__emoji' data-emoji-name={emoji.name}>
++        <CustomEmojiProvider emojis={custom}>
++          <Emoji code={code} />
++        </CustomEmojiProvider>
++      </div>
++    );
++  }
++
+   return (
+     <div
+       className='account__avatar-overlay'
+@@ -57,21 +102,7 @@ export const AvatarOverlay: React.FC<Props> = ({
+           )}
+         </div>
+       </div>
+-      <div className='account__avatar-overlay-overlay'>
+-        <div
+-          className='account__avatar'
+-          style={{ width: `${overlaySize}px`, height: `${overlaySize}px` }}
+-          data-avatar-of={`@${friend?.acct}`}
+-        >
+-          {friendSrc && (
+-            <img
+-              src={friendSrc}
+-              alt={friend?.acct}
+-              onError={handleImgLoadError}
+-            />
+-          )}
+-        </div>
+-      </div>
++      <div className='account__avatar-overlay-overlay'>{overlayElement}</div>
+     </div>
+   );
+ };
+diff --git a/app/javascript/flavours/glitch/components/status/legacy/action_bar/index.jsx b/app/javascript/flavours/glitch/components/status/legacy/action_bar/index.jsx
+index 60a740089e..932fc72bf2 100644
+--- a/app/javascript/flavours/glitch/components/status/legacy/action_bar/index.jsx
++++ b/app/javascript/flavours/glitch/components/status/legacy/action_bar/index.jsx
+@@ -16,7 +16,8 @@ import { accountAdminLink, statusAdminLink } from 'flavours/glitch/utils/backend
+ import { WithRouterPropTypes } from 'flavours/glitch/utils/react_router';
+ 
+ import { Dropdown } from '@/flavours/glitch/components/dropdown_menu';
+-import { me, quickBoosting } from '@/flavours/glitch/initial_state';
++import EmojiPickerDropdown from '@/flavours/glitch/features/compose/containers/emoji_picker_dropdown_container';
++import { me, maxReactions, quickBoosting } from '@/flavours/glitch/initial_state';
+ 
+ import { IconButton } from '@/flavours/glitch/components/icon_button';
+ import { injectIntl } from '@/flavours/glitch/components/intl';
+@@ -90,6 +91,7 @@ class StatusActionBar extends ImmutablePureComponent {
+     contextType: PropTypes.string,
+     onReply: PropTypes.func,
+     onFavourite: PropTypes.func,
++    onReactionAdd: PropTypes.func,
+     onDelete: PropTypes.func,
+     onRevokeQuote: PropTypes.func,
+     onQuotePolicyChange: PropTypes.func,
+@@ -155,6 +157,10 @@ class StatusActionBar extends ImmutablePureComponent {
+     }
+   };
+ 
++  handleEmojiPick = data => {
++    this.props.onReactionAdd(this.props.status.get('id'), data.native.replace(/:/g, ''), data.imageUrl);
++  };
++
+   handleBookmarkClick = (e) => {
+     this.props.onBookmark(this.props.status, e);
+   };
+@@ -351,6 +357,7 @@ class StatusActionBar extends ImmutablePureComponent {
+       </div>
+     );
+ 
++    const canReact = permissions && status.get('reactions').filter(r => r.get('count') > 0 && r.get('me')).size < maxReactions;
+     const bookmarkTitle = intl.formatMessage(status.get('bookmarked') ? messages.removeBookmark : messages.bookmark);
+     const favouriteTitle = intl.formatMessage(status.get('favourited') ? messages.removeFavourite : messages.favourite);
+ 
+@@ -375,6 +382,9 @@ class StatusActionBar extends ImmutablePureComponent {
+         <div className='status__action-bar__button-wrapper'>
+           <IconButton className='status__action-bar-button star-icon' animate active={status.get('favourited')} title={favouriteTitle} icon='star' iconComponent={status.get('favourited') ? StatusLikeActiveIcon : StatusLikeIcon} onClick={this.handleFavouriteClick} counter={withCounters ? status.get('favourites_count') : undefined} />
+         </div>
++        <div className='status__action-bar__button-wrapper'>
++          <EmojiPickerDropdown className='status__action-bar-button' onPickEmoji={this.handleEmojiPick} react disabled={!canReact} counter={withCounters ? status.get('reactions_count') : undefined} />
++        </div>
+         <div className='status__action-bar__button-wrapper'>
+           <IconButton className='status__action-bar-button bookmark-icon' disabled={!signedIn} active={status.get('bookmarked')} title={bookmarkTitle} icon='bookmark' iconComponent={status.get('bookmarked') ? StatusBookmarkActiveIcon : StatusBookmarkIcon} onClick={this.handleBookmarkClick} />
+         </div>
+@@ -391,6 +401,7 @@ class StatusActionBar extends ImmutablePureComponent {
+               size={18}
+               direction='right'
+               ariaLabel={intl.formatMessage(messages.more)}
++              // eslint-disable-next-line react/jsx-no-bind
+               onOpen={() => {
+                 dismissQuoteHint();
+                 return true;
+diff --git a/app/javascript/flavours/glitch/components/status/legacy/container.js b/app/javascript/flavours/glitch/components/status/legacy/container.js
+index 789c11de8d..4a18434fc8 100644
+--- a/app/javascript/flavours/glitch/components/status/legacy/container.js
++++ b/app/javascript/flavours/glitch/components/status/legacy/container.js
+@@ -17,6 +17,8 @@ import {
+   unbookmark,
+   pin,
+   unpin,
++  addReaction,
++  removeReaction,
+ } from '@/flavours/glitch/actions/interactions';
+ import { openModal } from '@/flavours/glitch/actions/modal';
+ import { initMuteModal } from '@/flavours/glitch/actions/mutes';
+@@ -69,16 +71,20 @@ const makeMapStateToProps = () => {
+   return mapStateToProps;
+ };
+ 
+-const mapDispatchToProps = (dispatch, { contextType }) => ({
++const mapDispatchToProps = (dispatch, ownProps) => ({
+ 
+   onReply (status) {
++    const getStatus = makeGetStatus();
++
+     dispatch((_, getState) => {
+       let state = getState();
++      const statusFromState = getStatus(state, ownProps);
++      const rebloggedBy = statusFromState.get('reblog') ? statusFromState.get('account') : undefined;
+ 
+       if (state.getIn(['local_settings', 'confirm_before_clearing_draft']) && state.getIn(['compose', 'text']).trim().length !== 0) {
+-        dispatch(openModal({ modalType: 'CONFIRM_REPLY', modalProps: { status } }));
++        dispatch(openModal({ modalType: 'CONFIRM_REPLY', modalProps: { status, rebloggedBy } }));
+       } else {
+-        dispatch(replyCompose(status));
++        dispatch(replyCompose(status, rebloggedBy));
+       }
+     });
+   },
+@@ -111,6 +117,14 @@ const mapDispatchToProps = (dispatch, { contextType }) => ({
+     }
+   },
+ 
++  onReactionAdd (statusId, name, url) {
++    dispatch(addReaction(statusId, name, url));
++  },
++
++  onReactionRemove (statusId, name) {
++    dispatch(removeReaction(statusId, name));
++  },
++
+   onEmbed (status) {
+     dispatch(openModal({
+       modalType: 'EMBED',
+@@ -197,6 +211,7 @@ const mapDispatchToProps = (dispatch, { contextType }) => ({
+   },
+ 
+   onAddFilter (status) {
++    const { contextType } = ownProps;
+     dispatch(initAddFilter(status, { contextType }));
+   },
+ 
+diff --git a/app/javascript/flavours/glitch/components/status/legacy/prepend.jsx b/app/javascript/flavours/glitch/components/status/legacy/prepend.jsx
+index 4f562d2930..8c69caee96 100644
+--- a/app/javascript/flavours/glitch/components/status/legacy/prepend.jsx
++++ b/app/javascript/flavours/glitch/components/status/legacy/prepend.jsx
+@@ -9,6 +9,7 @@ import ImmutablePropTypes from 'react-immutable-proptypes';
+ import EditIcon from '@/material-icons/400-24px/edit.svg?react';
+ import HomeIcon from '@/material-icons/400-24px/home-fill.svg?react';
+ import InsertChartIcon from '@/material-icons/400-24px/insert_chart.svg?react';
++import MoodIcon from '@/material-icons/400-24px/mood.svg?react';
+ import PushPinIcon from '@/material-icons/400-24px/push_pin.svg?react';
+ import { LinkedDisplayName } from 'flavours/glitch/components/display_name';
+ import { Icon } from 'flavours/glitch/components/icon';
+@@ -34,6 +35,7 @@ export default class StatusPrepend extends PureComponent {
+         }}
+       />
+     );
++
+     switch (type) {
+     case 'reblogged_by':
+       return (
+@@ -51,6 +53,17 @@ export default class StatusPrepend extends PureComponent {
+           values={{ name : link }}
+         />
+       );
++    case 'reaction':
++      return (
++        <FormattedMessage
++          id='notification.reaction'
++          defaultMessage='{name} reacted to your post <e>with</e>'
++          values={{
++            name: link,
++            e: () => ''
++          }}
++        />
++      );
+     case 'reblog':
+       return (
+         <FormattedMessage
+@@ -122,6 +135,10 @@ export default class StatusPrepend extends PureComponent {
+       iconId = 'star';
+       iconComponent = StatusLikeIcon;
+       break;
++    case 'reaction':
++      iconId = 'mood';
++      iconComponent = MoodIcon;
++      break;
+     case 'featured':
+       iconId = 'thumb-tack';
+       iconComponent = PushPinIcon;
+diff --git a/app/javascript/flavours/glitch/components/status/legacy/reactions.tsx b/app/javascript/flavours/glitch/components/status/legacy/reactions.tsx
+new file mode 100644
+index 0000000000..fd6c885c2c
+--- /dev/null
++++ b/app/javascript/flavours/glitch/components/status/legacy/reactions.tsx
+@@ -0,0 +1,131 @@
++import { useCallback, useMemo } from 'react';
++import type { FC, HTMLAttributes } from 'react';
++
++import classNames from 'classnames';
++
++import type { AnimatedProps } from '@react-spring/web';
++import { animated, useTransition } from '@react-spring/web';
++
++import {
++  addReaction,
++  removeReaction,
++} from '@/flavours/glitch/actions/interactions';
++import { AnimatedNumber } from '@/flavours/glitch/components/animated_number';
++import { Emoji } from '@/flavours/glitch/components/emoji';
++import {
++  AnimateEmojiProvider,
++  CustomEmojiProvider,
++} from '@/flavours/glitch/components/emoji/context';
++import { isUnicodeEmoji } from '@/flavours/glitch/features/emoji/utils';
++import { useIdentity } from '@/flavours/glitch/identity_context';
++import {
++  reduceMotion,
++  visibleReactions as visible,
++} from '@/flavours/glitch/initial_state';
++import type { StatusReactionMap } from '@/flavours/glitch/models/reaction';
++import { useAppDispatch } from '@/flavours/glitch/store';
++
++export const StatusReactions: FC<{
++  reactions: StatusReactionMap[];
++  id: string;
++}> = ({ reactions, id }) => {
++  const numVisible = visible ?? 6;
++  const visibleReactions = useMemo(() => {
++    let visible = reactions
++      .filter((x) => (x.get('count') as number) > 0)
++      .sort((a, b) => (b.get('count') as number) - (a.get('count') as number));
++
++    if (numVisible >= 0) {
++      visible = visible.filter((_, i) => i < numVisible);
++    }
++
++    return visible;
++  }, [numVisible, reactions]);
++
++  const transitions = useTransition(visibleReactions, {
++    from: {
++      scale: 0,
++    },
++    initial: {
++      scale: 1,
++    },
++    enter: {
++      scale: 1,
++    },
++    leave: {
++      scale: 0,
++    },
++    immediate: reduceMotion,
++    keys: visibleReactions.map((x) => x.get('name') as string),
++  });
++
++  return (
++    <div
++      className={classNames('reactions-bar', {
++        'reactions-bar--empty': visibleReactions.length === 0,
++      })}
++    >
++      {transitions(({ scale }, reaction) => (
++        <Reaction
++          key={reaction.get('name') as string}
++          reaction={reaction}
++          style={{ transform: scale.to((s) => `scale(${s})`) }}
++          id={id}
++        />
++      ))}
++    </div>
++  );
++};
++
++const Reaction: FC<{
++  reaction: StatusReactionMap;
++  id: string;
++  style: AnimatedProps<HTMLAttributes<HTMLButtonElement>>['style'];
++}> = ({ id, reaction, style }) => {
++  const dispatch = useAppDispatch();
++  const { signedIn } = useIdentity();
++  const handleClick = useCallback(() => {
++    if (!signedIn) return;
++    if (reaction.get('me')) {
++      dispatch(removeReaction(id, reaction.get('name')));
++    } else {
++      dispatch(addReaction(id, reaction.get('name')));
++    }
++  }, [dispatch, signedIn, id, reaction]);
++
++  const code = isUnicodeEmoji(reaction.get('name') as string)
++    ? (reaction.get('name') as string)
++    : `:${reaction.get('name') as string}:`;
++
++  let custom;
++  if (reaction.get('url')) {
++    custom = {
++      [reaction.get('name') as string]: {
++        shortcode: reaction.get('name') as string,
++        static_url: reaction.get('static_url') as string,
++        url: reaction.get('url') as string,
++      },
++    };
++  }
++
++  return (
++    <animated.button
++      className={classNames('reactions-bar__item', {
++        active: reaction.get('me'),
++      })}
++      onClick={handleClick}
++      style={style}
++    >
++      <AnimateEmojiProvider>
++        <CustomEmojiProvider emojis={custom}>
++          <span className='reactions-bar__item__emoji'>
++            <Emoji code={code} />
++          </span>
++        </CustomEmojiProvider>
++      </AnimateEmojiProvider>
++      <span className='reactions-bar__item__count'>
++        <AnimatedNumber value={reaction.get('count') as number} />
++      </span>
++    </animated.button>
++  );
++};
+diff --git a/app/javascript/flavours/glitch/components/status/legacy/status.jsx b/app/javascript/flavours/glitch/components/status/legacy/status.jsx
+index 7dbbd5a534..d8bed69bee 100644
+--- a/app/javascript/flavours/glitch/components/status/legacy/status.jsx
++++ b/app/javascript/flavours/glitch/components/status/legacy/status.jsx
+@@ -19,7 +19,7 @@ import Card from '@/flavours/glitch/features/status/components/card';
+ import Bundle from '@/flavours/glitch/features/ui/components/bundle';
+ import { MediaGallery, Video, Audio } from '@/flavours/glitch/features/ui/util/async-components';
+ import { SensitiveMediaContext } from '@/flavours/glitch/features/ui/util/sensitive_media_context';
+-import { displayMedia } from '@/flavours/glitch/initial_state';
++import { displayMedia, visibleReactions } from '@/flavours/glitch/initial_state';
+ import { CollectionPreviewCard } from '@/flavours/glitch/features/collections/components/collection_preview_card';
+ import { compareUrls } from '@/flavours/glitch/utils/compare_urls';
+ import AttachmentList from '@/flavours/glitch/components/attachment_list';
+@@ -34,6 +34,7 @@ import StatusActionBar from './action_bar';
+ import StatusContent from './content';
+ import StatusIcons from './icons';
+ import StatusPrepend from './prepend';
++import { StatusReactions } from './reactions';
+ 
+ const domParser = new DOMParser();
+ 
+@@ -101,6 +102,8 @@ class Status extends ImmutablePureComponent {
+     onDelete: PropTypes.func,
+     onDirect: PropTypes.func,
+     onMention: PropTypes.func,
++    onReactionAdd: PropTypes.func,
++    onReactionRemove: PropTypes.func,
+     onPin: PropTypes.func,
+     onOpenMedia: PropTypes.func,
+     onOpenVideo: PropTypes.func,
+@@ -540,7 +543,7 @@ class Status extends ImmutablePureComponent {
+           <div className='status__wrapper status__wrapper--filtered focusable' tabIndex={unfocusable ? null : 0} ref={this.handleRef}>
+             <FormattedMessage id='status.filtered' defaultMessage='Filtered' />: {matchedFilters.join(', ')}.
+             {' '}
+-            <button className='status__wrapper--filtered__button' onClick={this.handleUnfilterClick}>
++            <button className='status__wrapper--filtered__button' onClick={this.handleUnfilterClick} type='button'>
+               <FormattedMessage id='status.show_filter_reason' defaultMessage='Show anyway' />
+             </button>
+           </div>
+@@ -685,6 +688,7 @@ class Status extends ImmutablePureComponent {
+     if (this.props.prepend && account) {
+       const notifKind = {
+         favourite: 'favourited',
++        reaction: 'reacted',
+         reblog: 'boosted',
+         reblogged_by: 'boosted',
+         status: 'posted',
+@@ -768,6 +772,7 @@ class Status extends ImmutablePureComponent {
+                   collapsible
+                   media={media}
+                   onCollapsedToggle={this.handleCollapsedToggle}
++                  zoomEmojisOnHover={settings.get('zoom_emojis_on_hover')}
+                   {...statusContentProps}
+                 />
+ 
+@@ -781,6 +786,13 @@ class Status extends ImmutablePureComponent {
+             {/* This is a glitch-soc addition to have a placeholder */}
+             {!expanded && <MentionsPlaceholder status={status} />}
+ 
++            {(showActions && !isQuotedPost) &&
++              <StatusReactions
++                id={status.get('id')}
++                reactions={status.get('reactions').toArray()}
++              />
++            }
++
+             {(showActions && !isQuotedPost) &&
+               <StatusActionBar
+                 status={status}
+@@ -798,4 +810,4 @@ class Status extends ImmutablePureComponent {
+ 
+ }
+ 
+-export default withOptionalRouter(injectIntl(Status));
++export default withOptionalRouter(injectIntl((Status)));
+diff --git a/app/javascript/flavours/glitch/features/compose/components/emoji_picker_dropdown.jsx b/app/javascript/flavours/glitch/features/compose/components/emoji_picker_dropdown.jsx
+index cedbedfb04..aa72cf6954 100644
+--- a/app/javascript/flavours/glitch/features/compose/components/emoji_picker_dropdown.jsx
++++ b/app/javascript/flavours/glitch/features/compose/components/emoji_picker_dropdown.jsx
+@@ -7,6 +7,7 @@ import classNames from 'classnames';
+ 
+ import { supportsPassiveEvents } from 'detect-passive-events';
+ 
++import AddReactionIcon from '@/material-icons/400-24px/add_reaction.svg?react';
+ import MoodIcon from '@/material-icons/400-20px/mood.svg?react';
+ import { IconButton } from '@/flavours/glitch/components/icon_button';
+ import { injectIntl } from '@/flavours/glitch/components/intl';
+@@ -28,6 +29,7 @@ const messages = defineMessages({
+   objects: { id: 'emoji_button.objects', defaultMessage: 'Objects' },
+   symbols: { id: 'emoji_button.symbols', defaultMessage: 'Symbols' },
+   flags: { id: 'emoji_button.flags', defaultMessage: 'Flags' },
++  react: { id: 'status.react', defaultMessage: 'React' },
+ });
+ 
+ let EmojiPicker, Emoji; // load asynchronously
+@@ -38,7 +40,8 @@ const notFoundFn = () => (
+   <div className='emoji-mart-no-results'>
+     <Emoji
+       emoji='sleuth_or_spy'
+-      size={32}
++      sheetSize={43}
++      size={33}
+     />
+ 
+     <div className='emoji-mart-no-results-label'>
+@@ -249,8 +252,9 @@ class EmojiPickerMenuImpl extends PureComponent {
+     return (
+       <div className={classNames('emoji-picker-dropdown__menu', { selecting: modifierOpen })} style={style} ref={this.setRef}>
+         <EmojiPicker
+-          perLine={8}
+-          emojiSize={22}
++          perLine={7}
++          emojiSize={28}
++          sheetSize={32}
+           color=''
+           emoji=''
+           title={title}
+@@ -287,6 +291,7 @@ class EmojiPickerDropdown extends PureComponent {
+     onPickEmoji: PropTypes.func.isRequired,
+     onSkinTone: PropTypes.func.isRequired,
+     skinTone: PropTypes.number.isRequired,
++    react: PropTypes.bool,
+     disabled: PropTypes.bool,
+   };
+ 
+@@ -321,7 +326,7 @@ class EmojiPickerDropdown extends PureComponent {
+   };
+ 
+   onToggle = (e) => {
+-    if (!this.state.loading && (!e.key || e.key === 'Enter')) {
++    if (!this.state.disabled && !this.state.loading && (!e.key || e.key === 'Enter')) {
+       if (this.state.active) {
+         this.onHideDropdown();
+       } else {
+@@ -335,21 +340,21 @@ class EmojiPickerDropdown extends PureComponent {
+   };
+ 
+   render() {
+-    const { intl, onPickEmoji, onSkinTone, skinTone, frequentlyUsedEmojis, disabled } = this.props;
+-    const title = intl.formatMessage(messages.emoji);
++    const { intl, onPickEmoji, onSkinTone, skinTone, frequentlyUsedEmojis, react, disabled } = this.props;
++    const title = react ? intl.formatMessage(messages.react) : intl.formatMessage(messages.emoji);
++    const icon = react ? AddReactionIcon : MoodIcon;
+     const { active, loading, target } = this.state;
+ 
+     return (
+       <div className='emoji-picker-dropdown' ref={this.setTargetRef}>
+         <IconButton
+-          title={title}
++          title={title || intl.formatMessage(messages.emoji)}
+           aria-expanded={active}
+           active={active}
+-          iconComponent={MoodIcon}
++          iconComponent={icon}
+           onClick={this.onToggle}
+           disabled={disabled}
+           id="emoji"
+-          inverted
+         />
+ 
+         <Popover
+diff --git a/app/javascript/flavours/glitch/features/emoji/utils.ts b/app/javascript/flavours/glitch/features/emoji/utils.ts
+index 5053b75f15..758f29ff0a 100644
+--- a/app/javascript/flavours/glitch/features/emoji/utils.ts
++++ b/app/javascript/flavours/glitch/features/emoji/utils.ts
+@@ -34,7 +34,7 @@ export function stringHasUnicodeFlags(input: string): boolean {
+ }
+ 
+ // Constant as this is supported by all browsers.
+-const CUSTOM_EMOJI_REGEX = /:([a-z0-9_]+):/i;
++const CUSTOM_EMOJI_REGEX = /:([a-z0-9_]+)((@[a-z0-9\-.]+)|):/i;
+ // Use the polyfill regex or the Unicode property escapes if supported.
+ const EMOJI_REGEX = emojiRegexPolyfill?.source ?? '\\p{RGI_Emoji}';
+ 
+diff --git a/app/javascript/flavours/glitch/features/notifications/components/column_settings.jsx b/app/javascript/flavours/glitch/features/notifications/components/column_settings.jsx
+index 14d742e74d..01a8cc951a 100644
+--- a/app/javascript/flavours/glitch/features/notifications/components/column_settings.jsx
++++ b/app/javascript/flavours/glitch/features/notifications/components/column_settings.jsx
+@@ -75,7 +75,7 @@ class ColumnSettings extends PureComponent {
+ 
+         <section role='group' aria-labelledby='notifications-filter-bar'>
+           <h3 id='notifications-filter-bar'><FormattedMessage id='notifications.column_settings.filter_bar.category' defaultMessage='Quick filter bar' /></h3>
+- 
++
+           <div className='column-settings__row'>
+             <SettingToggle id='show-filter-bar' prefix='notifications' settings={settings} settingPath={['quickFilter', 'show']} onChange={onChange} label={filterBarShowStr} />
+             <SettingToggle id='show-filter-bar' prefix='notifications' settings={settings} settingPath={['quickFilter', 'advanced']} onChange={onChange} label={filterAdvancedStr} />
+@@ -129,6 +129,17 @@ class ColumnSettings extends PureComponent {
+           </div>
+         </section>
+ 
++        <section role='group' aria-labelledby='notifications-reaction'>
++          <h3 id='notifications-reaction'><FormattedMessage id='notifications.column_settings.reaction' defaultMessage='Reactions:' /></h3>
++
++          <div className='column-settings__pillbar'>
++            <PillBarButton disabled={browserPermission === 'denied'} prefix='notifications_desktop' settings={settings} settingPath={['alerts', 'reaction']} onChange={onChange} label={alertStr} />
++            {showPushSettings && <PillBarButton prefix='notifications_push' settings={pushSettings} settingPath={['alerts', 'reaction']} onChange={this.onPushChange} label={pushStr} />}
++            <PillBarButton prefix='notifications' settings={settings} settingPath={['shows', 'reaction']} onChange={onChange} label={showStr} />
++            <PillBarButton prefix='notifications' settings={settings} settingPath={['sounds', 'reaction']} onChange={onChange} label={soundStr} />
++          </div>
++        </section>
++
+         <section role='group' aria-labelledby='notifications-mention'>
+           <h3 id='notifications-mention'><FormattedMessage id='notifications.column_settings.mention' defaultMessage='Mentions:' /></h3>
+ 
+diff --git a/app/javascript/flavours/glitch/features/notifications/components/notification.jsx b/app/javascript/flavours/glitch/features/notifications/components/notification.jsx
+index 46ffed416b..fc78e76b08 100644
+--- a/app/javascript/flavours/glitch/features/notifications/components/notification.jsx
++++ b/app/javascript/flavours/glitch/features/notifications/components/notification.jsx
+@@ -186,6 +186,31 @@ class Notification extends ImmutablePureComponent {
+     );
+   }
+ 
++  renderReaction (notification) {
++    return (
++      <Status
++        containerId={notification.get('id')}
++        hidden={!!this.props.hidden}
++        id={notification.get('status')}
++        account={notification.get('account')}
++        prepend='reaction'
++        muted
++        withDismiss
++        notification={notification}
++        onMoveDown={this.handleMoveDown}
++        onMoveUp={this.handleMoveUp}
++        onMention={this.props.onMention}
++        contextType='notifications'
++        getScrollPosition={this.props.getScrollPosition}
++        updateScrollBottom={this.props.updateScrollBottom}
++        cachedMediaWidth={this.props.cachedMediaWidth}
++        cacheMediaWidth={this.props.cacheMediaWidth}
++        onUnmount={this.props.onUnmount}
++        unread={this.props.unread}
++      />
++    );
++  }
++
+   renderReblog (notification) {
+     return (
+       <Status
+@@ -408,10 +433,10 @@ class Notification extends ImmutablePureComponent {
+     }
+ 
+     const targetAccount = report.get('target_account');
+-    const targetLink = <LinkedDisplayName
++    const targetLink = (<LinkedDisplayName
+       className='notification__display-name'
+       displayProps={{account:targetAccount, variant: 'simple'}}
+-    />;
++    />);
+ 
+     return (
+       <Hotkeys handlers={this.getHandlers()}>
+@@ -446,6 +471,8 @@ class Notification extends ImmutablePureComponent {
+       return this.renderQuote(notification);
+     case 'favourite':
+       return this.renderFavourite(notification);
++    case 'reaction':
++      return this.renderReaction(notification);
+     case 'reblog':
+       return this.renderReblog(notification);
+     case 'status':
+diff --git a/app/javascript/flavours/glitch/features/notifications/requests.jsx b/app/javascript/flavours/glitch/features/notifications/requests.jsx
+index d0bbf38d70..24b0d663e5 100644
+--- a/app/javascript/flavours/glitch/features/notifications/requests.jsx
++++ b/app/javascript/flavours/glitch/features/notifications/requests.jsx
+@@ -19,11 +19,11 @@ import {
+ } from 'flavours/glitch/actions/notification_requests';
+ import { changeSetting } from 'flavours/glitch/actions/settings';
+ import { CheckBox } from 'flavours/glitch/components/check_box';
++import { Dropdown } from 'flavours/glitch/components/dropdown_menu';
+ import { Column } from '@/flavours/glitch/components/column';
+ import { ColumnHeader as LegacyColumnHeader } from '@/flavours/glitch/components/column/header';
+ import { Icon } from 'flavours/glitch/components/icon';
+ import ScrollableList from 'flavours/glitch/components/scrollable_list';
+-import { Dropdown } from 'flavours/glitch/components/dropdown_menu';
+ 
+ import { NotificationRequest } from './components/notification_request';
+ import { PolicyControls } from './components/policy_controls';
+diff --git a/app/javascript/flavours/glitch/features/notifications_v2/components/notification_group.tsx b/app/javascript/flavours/glitch/features/notifications_v2/components/notification_group.tsx
+index ec0d63e259..5a704d0251 100644
+--- a/app/javascript/flavours/glitch/features/notifications_v2/components/notification_group.tsx
++++ b/app/javascript/flavours/glitch/features/notifications_v2/components/notification_group.tsx
+@@ -18,6 +18,7 @@ import { NotificationModerationWarning } from './notification_moderation_warning
+ import { NotificationPoll } from './notification_poll';
+ import { NotificationQuote } from './notification_quote';
+ import { NotificationQuotedUpdate } from './notification_quoted_update';
++import { NotificationReaction } from './notification_reaction';
+ import { NotificationReblog } from './notification_reblog';
+ import { NotificationSeveredRelationships } from './notification_severed_relationships';
+ import { NotificationStatus } from './notification_status';
+@@ -71,6 +72,14 @@ export const NotificationGroup: React.FC<{
+         />
+       );
+       break;
++    case 'reaction':
++      content = (
++        <NotificationReaction
++          unread={unread}
++          notification={notificationGroup}
++        />
++      );
++      break;
+     case 'severed_relationships':
+       content = (
+         <NotificationSeveredRelationships
+diff --git a/app/javascript/flavours/glitch/features/notifications_v2/components/notification_reaction.tsx b/app/javascript/flavours/glitch/features/notifications_v2/components/notification_reaction.tsx
+new file mode 100644
+index 0000000000..31235e2913
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/notifications_v2/components/notification_reaction.tsx
+@@ -0,0 +1,107 @@
++import { useCallback } from 'react';
++
++import { FormattedMessage } from 'react-intl';
++
++import { Link } from 'react-router-dom';
++
++import MoodIcon from '@/material-icons/400-24px/mood.svg?react';
++import { Emoji } from 'flavours/glitch/components/emoji';
++import {
++  AnimateEmojiProvider,
++  CustomEmojiProvider,
++} from 'flavours/glitch/components/emoji/context';
++import type { ExtraCustomEmojiMap } from 'flavours/glitch/features/emoji/types';
++import { isUnicodeEmoji } from 'flavours/glitch/features/emoji/utils';
++import type { NotificationGroupReaction } from 'flavours/glitch/models/notification_group';
++import { useAppSelector } from 'flavours/glitch/store';
++
++import type { LabelRenderer } from './notification_group_with_status';
++import { NotificationGroupWithStatus } from './notification_group_with_status';
++
++export const NotificationReaction: React.FC<{
++  notification: NotificationGroupReaction;
++  unread: boolean;
++}> = ({ notification, unread }) => {
++  const statusAccount = useAppSelector(
++    (state) =>
++      state.accounts.get(
++        state.statuses.getIn([notification.statusId, 'account']) as string,
++      )?.acct,
++  );
++
++  const labelRenderer = useCallback<LabelRenderer>(
++    (displayedName, total, seeMoreHref) => {
++      if (notification.reaction && total === 1) {
++        const code = isUnicodeEmoji(notification.reaction.name)
++          ? notification.reaction.name
++          : `:${notification.reaction.name}:`;
++        let custom: ExtraCustomEmojiMap | undefined;
++        if (notification.reaction.url && notification.reaction.static_url) {
++          custom = {
++            [notification.reaction.name]: {
++              shortcode: notification.reaction.name,
++              static_url: notification.reaction.static_url,
++              url: notification.reaction.url,
++            },
++          };
++        }
++
++        return (
++          <AnimateEmojiProvider>
++            <FormattedMessage
++              id='notification.reaction'
++              defaultMessage='{name} reacted to your post <e>with</e>'
++              values={{
++                name: displayedName,
++                e: (chunks) =>
++                  notification.reaction ? (
++                    <>
++                      {chunks}{' '}
++                      <CustomEmojiProvider emojis={custom}>
++                        <Emoji code={code} />
++                      </CustomEmojiProvider>
++                    </>
++                  ) : (
++                    ''
++                  ),
++              }}
++            />
++          </AnimateEmojiProvider>
++        );
++      }
++
++      return (
++        <FormattedMessage
++          id='notification.reaction.name_and_others_with_link'
++          defaultMessage='{name} and <a>{count, plural, one {# other} other {# others}}</a> reacted to your post'
++          values={{
++            name: displayedName,
++            count: total - 1,
++            a: (chunks) =>
++              seeMoreHref ? <Link to={seeMoreHref}>{chunks}</Link> : chunks,
++          }}
++        />
++      );
++    },
++    [notification.reaction],
++  );
++
++  return (
++    <NotificationGroupWithStatus
++      type='reaction'
++      icon={MoodIcon}
++      iconId='react'
++      accountIds={notification.sampleAccountIds}
++      statusId={notification.statusId}
++      timestamp={notification.latest_page_notification_at}
++      count={notification.notifications_count}
++      labelRenderer={labelRenderer}
++      labelSeeMoreHref={
++        statusAccount
++          ? `/@${statusAccount}/${notification.statusId}/reactions`
++          : undefined
++      }
++      unread={unread}
++    />
++  );
++};
+diff --git a/app/javascript/flavours/glitch/features/notifications_v2/filter_bar.tsx b/app/javascript/flavours/glitch/features/notifications_v2/filter_bar.tsx
+index b2768bfa87..986c391c15 100644
+--- a/app/javascript/flavours/glitch/features/notifications_v2/filter_bar.tsx
++++ b/app/javascript/flavours/glitch/features/notifications_v2/filter_bar.tsx
+@@ -11,6 +11,7 @@ import {
+ import CollectionsIcon from '@/material-icons/400-24px/category.svg?react';
+ import HomeIcon from '@/material-icons/400-24px/home-fill.svg?react';
+ import InsertChartIcon from '@/material-icons/400-24px/insert_chart.svg?react';
++import MoodIcon from '@/material-icons/400-24px/mood.svg?react';
+ import PersonAddIcon from '@/material-icons/400-24px/person_add.svg?react';
+ import { setNotificationsFilter } from 'flavours/glitch/actions/notification_groups';
+ import { Icon } from 'flavours/glitch/components/icon';
+@@ -27,6 +28,10 @@ const tooltips = defineMessages({
+     id: 'notifications.filter.favourites',
+     defaultMessage: 'Favorites',
+   },
++  reactions: {
++    id: 'notifications.filter.reactions',
++    defaultMessage: 'Reactions',
++  },
+   boosts: { id: 'notifications.filter.boosts', defaultMessage: 'Boosts' },
+   polls: { id: 'notifications.filter.polls', defaultMessage: 'Poll results' },
+   follows: { id: 'notifications.filter.follows', defaultMessage: 'Follows' },
+@@ -105,6 +110,14 @@ export const FilterBar: React.FC = () => {
+         >
+           <Icon id='star' icon={StatusLikeIcon} />
+         </BarButton>
++        <BarButton
++          selectedFilter={selectedFilter}
++          type='reaction'
++          key='reaction'
++          title={intl.formatMessage(tooltips.reactions)}
++        >
++          <Icon id='react' icon={MoodIcon} />
++        </BarButton>
+         <BarButton
+           selectedFilter={selectedFilter}
+           type='reblog'
+diff --git a/app/javascript/flavours/glitch/features/reactions/index.tsx b/app/javascript/flavours/glitch/features/reactions/index.tsx
+new file mode 100644
+index 0000000000..b8cf86433a
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/reactions/index.tsx
+@@ -0,0 +1,156 @@
++import { useCallback, useEffect } from 'react';
++
++import { defineMessages, FormattedMessage, useIntl } from 'react-intl';
++
++import { useParams } from 'react-router-dom';
++
++import type { OrderedSet as ImmutableOrderedSet } from 'immutable';
++
++import { ArrowClockwiseIcon } from '@phosphor-icons/react';
++import { Helmet } from '@unhead/react/helmet';
++import { useDebouncedCallback } from 'use-debounce';
++
++import { ColumnHeader as LegacyColumnHeader } from '@/flavours/glitch/components/column/header';
++import {
++  ColumnHeader,
++  ColumnHeaderButton,
++} from '@/flavours/glitch/components/column_header';
++import { useAppDispatch, useAppSelector } from '@/flavours/glitch/store';
++import { isRedesignEnabled } from '@/flavours/glitch/utils/environment';
++import MoodIcon from '@/material-icons/400-24px/mood.svg?react';
++import RefreshIcon from '@/material-icons/400-24px/refresh.svg?react';
++import {
++  fetchReactions,
++  expandReactions,
++} from 'flavours/glitch/actions/interactions';
++import { Account } from 'flavours/glitch/components/account';
++import { Column } from 'flavours/glitch/components/column';
++import { Icon } from 'flavours/glitch/components/icon';
++import { LoadingIndicator } from 'flavours/glitch/components/loading_indicator';
++import ScrollableList from 'flavours/glitch/components/scrollable_list';
++import type { StatusReaction } from 'flavours/glitch/models/reaction';
++
++const messages = defineMessages({
++  title: { id: 'status.reactions_title', defaultMessage: 'Post Reactions' },
++  heading: { id: 'column.reacted_by', defaultMessage: 'Reacted by' },
++  refresh: { id: 'refresh', defaultMessage: 'Refresh' },
++});
++
++const Reactions: React.FC<{ multiColumn?: boolean }> = ({ multiColumn }) => {
++  const dispatch = useAppDispatch();
++  const intl = useIntl();
++
++  const { statusId } = useParams<{ statusId?: string }>();
++
++  const { reactions, hasMore, isLoading } = useAppSelector((state) => ({
++    reactions: state.status_reactions.getIn([
++      'reactions',
++      statusId,
++      'items',
++    ]) as ImmutableOrderedSet<StatusReaction> | undefined,
++    hasMore: !!state.status_reactions.getIn(['reactions', statusId, 'next']),
++    isLoading: state.status_reactions.getIn(
++      ['reactions', statusId, 'isLoading'],
++      true,
++    ) as boolean,
++  }));
++
++  useEffect(() => {
++    if (!reactions) {
++      dispatch(fetchReactions(statusId));
++    }
++  }, [reactions, dispatch, statusId]);
++
++  const handleRefresh = useCallback(() => {
++    dispatch(fetchReactions(statusId));
++  }, [dispatch, statusId]);
++
++  const handleLoadMore = useDebouncedCallback(
++    () => {
++      dispatch(expandReactions(statusId));
++    },
++    300,
++    {
++      leading: true,
++    },
++  );
++
++  if (!reactions) {
++    return (
++      <Column>
++        <LoadingIndicator />
++      </Column>
++    );
++  }
++
++  const emptyMessage = (
++    <FormattedMessage
++      id='status.reactions.empty'
++      defaultMessage='No one has reacted to this post yet. When someone does, they will show up here.'
++    />
++  );
++
++  return (
++    <Column bindToDocument={!multiColumn}>
++      {isRedesignEnabled() ? (
++        <ColumnHeader
++          withBackButton
++          title={intl.formatMessage(messages.title)}
++          extraButtons={
++            <ColumnHeaderButton
++              icon={ArrowClockwiseIcon}
++              onClick={handleRefresh}
++            >
++              {intl.formatMessage(messages.refresh)}
++            </ColumnHeaderButton>
++          }
++        />
++      ) : (
++        <LegacyColumnHeader
++          icon='mood'
++          iconComponent={MoodIcon}
++          title={intl.formatMessage(messages.heading)}
++          scrollTopOnClick
++          showBackButton
++          multiColumn={multiColumn}
++          extraButton={
++            <button
++              type='button'
++              className='column-header__button'
++              title={intl.formatMessage(messages.refresh)}
++              aria-label={intl.formatMessage(messages.refresh)}
++              onClick={handleRefresh}
++            >
++              <Icon id='refresh' icon={RefreshIcon} />
++            </button>
++          }
++        />
++      )}
++
++      <ScrollableList
++        scrollKey='reactions'
++        onLoadMore={handleLoadMore}
++        hasMore={hasMore}
++        isLoading={isLoading}
++        emptyMessage={emptyMessage}
++        bindToDocument={!multiColumn}
++      >
++        {reactions.map((r) => (
++          <Account
++            key={r.id}
++            id={r.account}
++            reference='status'
++            overlayEmoji={r}
++          />
++        ))}
++      </ScrollableList>
++
++      <Helmet>
++        <meta name='robots' content='noindex' />
++      </Helmet>
++    </Column>
++  );
++};
++
++// eslint-disable-next-line import/no-default-export
++export default Reactions;
+diff --git a/app/javascript/flavours/glitch/features/status/components/action_bar.jsx b/app/javascript/flavours/glitch/features/status/components/action_bar.jsx
+index 3b42e89821..1773868a9a 100644
+--- a/app/javascript/flavours/glitch/features/status/components/action_bar.jsx
++++ b/app/javascript/flavours/glitch/features/status/components/action_bar.jsx
+@@ -14,7 +14,8 @@ import { accountAdminLink, statusAdminLink } from 'flavours/glitch/utils/backend
+ 
+ import { IconButton } from '@/flavours/glitch/components/icon_button';
+ import { Dropdown } from 'flavours/glitch/components/dropdown_menu';
+-import { me, quickBoosting } from '@/flavours/glitch/initial_state';
++import { me, maxReactions, quickBoosting } from '@/flavours/glitch/initial_state';
++import EmojiPickerDropdown from '../../compose/containers/emoji_picker_dropdown_container';
+ import { BoostButton } from '@/flavours/glitch/components/status/legacy/boost_button';
+ import { quoteItemState } from '@/flavours/glitch/components/status/boost_button_utils';
+ import { selectStatusConditions } from '@/flavours/glitch/selectors/statuses';
+@@ -36,6 +37,7 @@ const baseMessages = defineMessages({
+   mention: { id: 'status.mention', defaultMessage: 'Mention @{name}' },
+   reply: { id: 'status.reply', defaultMessage: 'Reply' },
+   favourite: { id: 'status.favourite', defaultMessage: 'Favorite' },
++  react: { id: 'status.react', defaultMessage: 'React' },
+   removeFavourite: { id: 'status.remove_favourite', defaultMessage: 'Remove from favorites' },
+   bookmark: { id: 'status.bookmark', defaultMessage: 'Bookmark' },
+   removeBookmark: { id: 'status.remove_bookmark', defaultMessage: 'Remove bookmark' },
+@@ -84,9 +86,11 @@ class ActionBar extends PureComponent {
+     onReply: PropTypes.func.isRequired,
+     onReblog: PropTypes.func.isRequired,
+     onFavourite: PropTypes.func.isRequired,
++    onReactionAdd: PropTypes.func.isRequired,
+     onBookmark: PropTypes.func.isRequired,
+     onDelete: PropTypes.func.isRequired,
+     onRevokeQuote: PropTypes.func,
++    onQuote: PropTypes.func,
+     onQuotePolicyChange: PropTypes.func,
+     onEdit: PropTypes.func.isRequired,
+     onDirect: PropTypes.func.isRequired,
+@@ -112,6 +116,10 @@ class ActionBar extends PureComponent {
+     this.props.onFavourite(this.props.status, e);
+   };
+ 
++  handleEmojiPick = data => {
++    this.props.onReactionAdd(this.props.status.get('id'), data.native.replace(/:/g, ''), data.imageUrl);
++  };
++
+   handleBookmarkClick = (e) => {
+     this.props.onBookmark(this.props.status, e);
+   };
+@@ -183,6 +191,8 @@ class ActionBar extends PureComponent {
+     navigator.clipboard.writeText(url);
+   };
+ 
++  handleNoOp = () => {}; // hack for reaction add button
++
+   render () {
+     const { status, statusQuoteState, quotedAccountId, intl } = this.props;
+     const { signedIn, permissions } = this.props.identity;
+@@ -285,6 +295,8 @@ class ActionBar extends PureComponent {
+       replyIconComponent = StatusReplyAllIcon;
+     }
+ 
++    const canReact = signedIn && status.get('reactions').filter(r => r.get('count') > 0 && r.get('me')).size < maxReactions;
++
+     const bookmarkTitle = intl.formatMessage(status.get('bookmarked') ? messages.removeBookmark : messages.bookmark);
+     const favouriteTitle = intl.formatMessage(status.get('favourited') ? messages.removeFavourite : messages.favourite);
+ 
+@@ -299,6 +311,9 @@ class ActionBar extends PureComponent {
+         <div className='detailed-status__button'>
+           <IconButton className='star-icon' animate active={status.get('favourited')} title={favouriteTitle} icon='star' iconComponent={status.get('favourited') ? StatusLikeActiveIcon : StatusLikeIcon} onClick={this.handleFavouriteClick} />
+         </div>
++        <div className='detailed-status__button'>
++          <EmojiPickerDropdown onPickEmoji={this.handleEmojiPick} react disabled={!canReact} />
++        </div>
+         <div className='detailed-status__button'>
+           <IconButton className='bookmark-icon' disabled={!signedIn} active={status.get('bookmarked')} title={bookmarkTitle} icon='bookmark' iconComponent={status.get('bookmarked') ? StatusBookmarkActiveIcon : StatusBookmarkIcon} onClick={this.handleBookmarkClick} />
+         </div>
+diff --git a/app/javascript/flavours/glitch/features/status/components/detailed_status.tsx b/app/javascript/flavours/glitch/features/status/components/detailed_status.tsx
+index f544f3e8dd..8d0acb9f5a 100644
+--- a/app/javascript/flavours/glitch/features/status/components/detailed_status.tsx
++++ b/app/javascript/flavours/glitch/features/status/components/detailed_status.tsx
+@@ -31,12 +31,14 @@ import { IconLogo } from 'flavours/glitch/components/logo';
+ import MediaGallery from 'flavours/glitch/components/media_gallery';
+ import { Permalink } from 'flavours/glitch/components/permalink';
+ import { MentionsPlaceholder } from 'flavours/glitch/components/status/legacy/mentions_placeholder';
++import { StatusReactions } from 'flavours/glitch/components/status/legacy/reactions';
+ import { VisibilityIcon } from 'flavours/glitch/components/visibility_icon';
+ import { Audio } from 'flavours/glitch/features/audio';
+ import { CollectionPreviewCard } from 'flavours/glitch/features/collections/components/collection_preview_card';
+ import scheduleIdleTask from 'flavours/glitch/features/ui/util/schedule_idle_task';
+ import { Video } from 'flavours/glitch/features/video';
+ import { useIdentity } from 'flavours/glitch/identity_context';
++import { visibleReactions } from 'flavours/glitch/initial_state';
+ import type { CollectionAttachment } from 'flavours/glitch/models/status';
+ import { useAppSelector } from 'flavours/glitch/store';
+ import { compareUrls } from 'flavours/glitch/utils/compare_urls';
+@@ -70,6 +72,8 @@ export const DetailedStatus: React.FC<{
+   pictureInPicture: any;
+   onToggleHidden?: (status: any) => void;
+   onToggleMediaVisibility?: () => void;
++  onReactionAdd?: (status: any, name: string, url: string) => void;
++  onReactionRemove?: (status: any, name: string) => void;
+   ancestors?: number;
+   multiColumn?: boolean;
+   expanded: boolean;
+@@ -482,6 +486,22 @@ export const DetailedStatus: React.FC<{
+     </Link>
+   );
+ 
++  const reactionLink = (
++    <Link
++      to={`/@${status.getIn(['account', 'acct'])}/${status.get('id')}/reactions`}
++      className='detailed-status__link'
++    >
++      <span className='detailed-status__reactions'>
++        <AnimatedNumber value={status.get('reactions_count')} />
++      </span>
++      <FormattedMessage
++        id='status.reactions'
++        defaultMessage='{count, plural, one {reaction} other {reactions}}'
++        values={{ count: status.get('reactions_count') }}
++      />
++    </Link>
++  );
++
+   const { statusContentProps, hashtagBar } = getHashtagBarForStatus(
+     status as StatusLike,
+   );
+@@ -571,6 +591,13 @@ export const DetailedStatus: React.FC<{
+         {/* This is a glitch-soc addition to have a placeholder */}
+         {!expanded && <MentionsPlaceholder status={status} />}
+ 
++        {!!visibleReactions && (
++          <StatusReactions
++            id={status.get('id')}
++            reactions={status.get('reactions').toArray()}
++          />
++        )}
++
+         <div className='detailed-status__meta'>
+           <div className='detailed-status__meta__line'>
+             <a
+@@ -608,7 +635,7 @@ export const DetailedStatus: React.FC<{
+             {reblogLink && <>·</>}
+             {quotesLink}
+             {quotesLink && <>·</>}
+-            {favouriteLink}
++            {favouriteLink}·{reactionLink}
+           </div>
+         </div>
+       </div>
+diff --git a/app/javascript/flavours/glitch/features/ui/util/async-components.js b/app/javascript/flavours/glitch/features/ui/util/async-components.js
+index db42e6971b..5b4ed46779 100644
+--- a/app/javascript/flavours/glitch/features/ui/util/async-components.js
++++ b/app/javascript/flavours/glitch/features/ui/util/async-components.js
+@@ -22,6 +22,10 @@ export function CommunityTimeline () {
+   return import('../../community_timeline');
+ }
+ 
++export function BubbleTimeline () {
++  return import('../../bubble_timeline');
++}
++
+ export function Firehose () {
+   return import('../../firehose');
+ }
+@@ -110,6 +114,10 @@ export function Favourites () {
+   return import('../../favourites');
+ }
+ 
++export function Reactions () {
++  return import('../../reactions');
++}
++
+ export function Quotes () {
+   return import('../../quotes');
+ }
+diff --git a/app/javascript/flavours/glitch/initial_state.ts b/app/javascript/flavours/glitch/initial_state.ts
+index a293ba4cd1..7d21d40e9f 100644
+--- a/app/javascript/flavours/glitch/initial_state.ts
++++ b/app/javascript/flavours/glitch/initial_state.ts
+@@ -28,6 +28,7 @@ interface InitialStateMeta {
+   limited_federation_mode: boolean;
+   locale: string;
+   mascot: string | null;
++  max_reactions: number;
+   me?: string;
+   moved_to_account_id?: string;
+   owner?: string;
+@@ -41,8 +42,10 @@ interface InitialStateMeta {
+   source_url: string;
+   streaming_api_base_url: string;
+   local_live_feed_access: 'public' | 'authenticated' | 'disabled';
++  bubble_live_feed_access: 'public' | 'authenticated' | 'disabled';
+   remote_live_feed_access: 'public' | 'authenticated' | 'disabled';
+   local_topic_feed_access: 'public' | 'authenticated';
++  bubble_topic_feed_access: 'public' | 'authenticated' | 'disabled';
+   remote_topic_feed_access: 'public' | 'authenticated' | 'disabled';
+   title: string;
+   custom_app_icon: string | null;
+@@ -51,6 +54,7 @@ interface InitialStateMeta {
+   use_blurhash: boolean;
+   use_pending_items?: boolean;
+   version: string;
++  visible_reactions: number;
+   sso_redirect: string;
+   status_page_url: string;
+   terms_of_service_enabled: boolean;
+@@ -100,6 +104,7 @@ export interface InitialState {
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   local_settings: any;
+   max_feed_hashtags: number;
++  max_reactions: number;
+   poll_limits: PollLimits;
+ }
+ 
+@@ -166,6 +171,7 @@ export const showTrends = getMeta('show_trends');
+ export const singleUserMode = getMeta('single_user_mode');
+ export const source_url = getMeta('source_url');
+ export const localLiveFeedAccess = getMeta('local_live_feed_access');
++export const bubbleLiveFeedAccess = getMeta('bubble_live_feed_access');
+ export const remoteLiveFeedAccess = getMeta('remote_live_feed_access');
+ export const localTopicFeedAccess = getMeta('local_topic_feed_access');
+ export const remoteTopicFeedAccess = getMeta('remote_topic_feed_access');
+@@ -205,6 +211,8 @@ export const maxFeedHashtags = initialState?.max_feed_hashtags ?? 4;
+ export const favouriteModal = getMeta('favourite_modal');
+ export const pollLimits = initialState?.poll_limits;
+ export const defaultContentType = getMeta('default_content_type');
++export const maxReactions = initialState?.max_reactions ?? 1;
++export const visibleReactions = getMeta('visible_reactions');
+ 
+ export function getAccessToken(): string | undefined {
+   return getMeta('access_token');
+diff --git a/app/javascript/flavours/glitch/locales/en.json b/app/javascript/flavours/glitch/locales/en.json
+index 03ea2c9785..08a5ca27ee 100644
+--- a/app/javascript/flavours/glitch/locales/en.json
++++ b/app/javascript/flavours/glitch/locales/en.json
+@@ -1,11 +1,17 @@
+ {
++  "about.bubble.preamble": "This server provides a \"bubble timeline\", which displays content from these other servers in the fediverse that have been chosen by the admins of this server.",
++  "about.bubble.title": "Bubble servers",
+   "about.fork_disclaimer": "Glitch-soc is free open source software forked from Mastodon.",
+   "account.disclaimer_full": "Information below may reflect the user's profile incompletely.",
+   "account.follows": "Follows",
+   "account.suspended_disclaimer_full": "This user has been suspended by a moderator.",
+   "account.view_full_profile": "View full profile",
+   "boost_modal.missing_description": "This toot contains some media without description",
++  "bubble.column_settings.media_only": "Media only",
++  "column.bubble": "Bubble timeline",
++  "column.bubble_servers": "Bubble Servers",
+   "column.favourited_by": "Favourited by",
++  "column.reacted_by": "Reacted by",
+   "column.reblogged_by": "Boosted by",
+   "column_header.profile": "Profile",
+   "community.column_settings.allow_local_only": "Show local-only toots",
+@@ -27,11 +33,14 @@
+   "confirmations.deprecated_settings.confirm": "Use Mastodon preferences",
+   "confirmations.deprecated_settings.message": "Some of the glitch-soc device-specific {app_settings} you are using have been replaced by Mastodon {preferences} and will be overriden:",
+   "direct.group_by_conversations": "Group by conversation",
++  "dismissable_banner.bubble_timeline": "These are the most recent public posts from people on the fediverse whose accounts are on other servers selected by {domain}.",
++  "empty_column.bubble": "The bubble timeline is currently empty, but something might show up here soon!",
+   "favourite_modal.favourite": "Favourite post?",
+   "federation.federated.long": "Allow this post to reach other servers",
+   "federation.federated.short": "Federated",
+   "federation.local_only.long": "Prevent this post from reaching other servers",
+   "federation.local_only.short": "Local-only",
++  "firehose.bubble": "Bubble servers",
+   "firehose.column_settings.allow_local_only": "Show local-only posts in \"All\"",
+   "home.column_settings.advanced": "Advanced",
+   "home.column_settings.filter_regex": "Filter out by regular expressions",
+@@ -41,7 +50,12 @@
+   "keyboard_shortcuts.secondary_toot": "to send toot using secondary privacy setting",
+   "moved_to_warning": "This account is marked as moved to {moved_to_link}, and may thus not accept new follows.",
+   "navigation_bar.app_settings": "App settings",
++  "notification.reaction": "{name} reacted to your post <e>with</e>",
++  "notification.reaction.name_and_others_with_link": "{name} and <a>{count, plural, one {# other} other {# others}}</a> reacted to your post",
++  "navigation_bar.live_feed_bubble": "Live feed (bubble)",
+   "notifications.column_settings.filter_bar.show_bar": "Show filter bar",
++  "notifications.column_settings.reaction": "Reactions:",
++  "notifications.filter.reactions": "Reactions",
+   "settings.always_show_spoilers_field": "Always enable the Content Warning field",
+   "settings.close": "Close",
+   "settings.compose_box_opts": "Compose box",
+@@ -114,5 +128,9 @@
+   "status.in_reply_to": "This toot is a reply",
+   "status.is_poll": "This toot is a poll",
+   "status.local_only": "Only visible from your instance",
++  "status.react": "React",
++  "status.reactions": "{count, plural, one {reaction} other {reactions}}",
++  "status.reactions.empty": "No one has reacted to this post yet. When someone does, they will show up here.",
++  "status.reactions_title": "Post Reactions",
+   "status.show_filter_reason": "Show anyway"
+ }
+diff --git a/app/javascript/flavours/glitch/models/notification_group.ts b/app/javascript/flavours/glitch/models/notification_group.ts
+index d9d1c8b286..1d7ecdc399 100644
+--- a/app/javascript/flavours/glitch/models/notification_group.ts
++++ b/app/javascript/flavours/glitch/models/notification_group.ts
+@@ -8,6 +8,7 @@ import type {
+   NotificationType,
+   NotificationWithStatusType,
+ } from 'flavours/glitch/api_types/notifications';
++import type { ApiStatusReactionJSON } from 'flavours/glitch/api_types/reaction';
+ import type { ApiReportJSON } from 'flavours/glitch/api_types/reports';
+ 
+ import type { ApiCollectionJSON } from '../api_types/collections';
+@@ -98,8 +99,16 @@ export interface NotificationGroupCollectionUpdate extends BaseNotification<'col
+   collection: Collection | null;
+ }
+ 
++type StatusReaction = Omit<Omit<ApiStatusReactionJSON, 'account'>, 'count'>;
++
++export interface NotificationGroupReaction extends BaseNotification<'reaction'> {
++  statusId: string | undefined;
++  reaction: StatusReaction | undefined;
++}
++
+ export type NotificationGroup =
+   | NotificationGroupFavourite
++  | NotificationGroupReaction
+   | NotificationGroupReblog
+   | NotificationGroupStatus
+   | NotificationGroupMention
+@@ -169,6 +178,20 @@ export function createNotificationGroupFromJSON(
+         ...groupWithoutStatus,
+       };
+     }
++    case 'reaction': {
++      const {
++        status_id: statusId,
++        reaction,
++        ...groupWithoutStatusOrReaction
++      } = group;
++      return {
++        statusId: statusId ?? undefined,
++        reaction,
++        sampleAccountIds,
++        partial: false,
++        ...groupWithoutStatusOrReaction,
++      };
++    }
+     case 'admin.report': {
+       const { report, ...groupWithoutTargetAccount } = group;
+       return {
+@@ -240,6 +263,13 @@ export function createNotificationGroupFromNotificationJSON(
+         type: notification.type,
+         statusId: notification.status?.id,
+       };
++    case 'reaction':
++      return {
++        ...group,
++        type: notification.type,
++        statusId: notification.status?.id,
++        reaction: notification.reaction,
++      };
+     case 'admin.report':
+       return {
+         ...group,
+diff --git a/app/javascript/flavours/glitch/models/reaction.ts b/app/javascript/flavours/glitch/models/reaction.ts
+new file mode 100644
+index 0000000000..0bc8713d8b
+--- /dev/null
++++ b/app/javascript/flavours/glitch/models/reaction.ts
+@@ -0,0 +1,8 @@
++import type { ApiStatusReactionJSON } from 'flavours/glitch/api_types/reaction';
++
++type StatusReactionShape = Required<ApiStatusReactionJSON>;
++export interface StatusReaction extends Omit<StatusReactionShape, 'account'> {
++  account: string;
++}
++
++export type StatusReactionMap = Immutable.Map<string, unknown>;
+diff --git a/app/javascript/flavours/glitch/reducers/index.ts b/app/javascript/flavours/glitch/reducers/index.ts
+index 9500c8a0b4..ac90137d15 100644
+--- a/app/javascript/flavours/glitch/reducers/index.ts
++++ b/app/javascript/flavours/glitch/reducers/index.ts
+@@ -35,6 +35,7 @@ import { serverReducer } from './server';
+ import settings from './settings';
+ import { sliceReducers } from './slices';
+ import status_lists from './status_lists';
++import status_reactions from './status_reactions';
+ import statuses from './statuses';
+ import { suggestionsReducer } from './suggestions';
+ import { followedTagsReducer } from './tags';
+@@ -78,6 +79,7 @@ const reducers = {
+   markers: markersReducer,
+   picture_in_picture: pictureInPictureReducer,
+   history,
++  status_reactions,
+   notificationPolicy: notificationPolicyReducer,
+   notificationRequests: notificationRequestsReducer,
+   navigation: navigationReducer,
+diff --git a/app/javascript/flavours/glitch/reducers/settings.js b/app/javascript/flavours/glitch/reducers/settings.js
+index e334f12876..040429916f 100644
+--- a/app/javascript/flavours/glitch/reducers/settings.js
++++ b/app/javascript/flavours/glitch/reducers/settings.js
+@@ -36,6 +36,7 @@ const initialState = ImmutableMap({
+       follow: false,
+       follow_request: false,
+       favourite: false,
++      reaction: false,
+       reblog: false,
+       quote: false,
+       mention: false,
+@@ -61,6 +62,7 @@ const initialState = ImmutableMap({
+       follow: true,
+       follow_request: false,
+       favourite: true,
++      reaction: true,
+       reblog: true,
+       quote: true,
+       mention: true,
+@@ -76,6 +78,7 @@ const initialState = ImmutableMap({
+       follow: true,
+       follow_request: false,
+       favourite: true,
++      reaction: true,
+       reblog: true,
+       quote: true,
+       mention: true,
+diff --git a/app/javascript/flavours/glitch/reducers/status_reactions.js b/app/javascript/flavours/glitch/reducers/status_reactions.js
+new file mode 100644
+index 0000000000..20f2280e23
+--- /dev/null
++++ b/app/javascript/flavours/glitch/reducers/status_reactions.js
+@@ -0,0 +1,58 @@
++import { Map as ImmutableMap, OrderedSet as ImmutableOrderedSet } from 'immutable';
++
++import {
++  REACTIONS_FETCH_SUCCESS,
++  REACTIONS_EXPAND_SUCCESS,
++  REACTIONS_FETCH_REQUEST,
++  REACTIONS_EXPAND_REQUEST,
++  REACTIONS_FETCH_FAIL,
++  REACTIONS_EXPAND_FAIL,
++} from '../actions/interactions';
++
++const initialState = ImmutableMap({
++  reactions: ImmutableMap({
++    next: null,
++    isLoading: false,
++    items: ImmutableOrderedSet(),
++  }),
++});
++
++const normalizeList = (state, path, reactions, next) => {
++  const filteredReactions = reactions.map(v => {
++    v.account = v.account.id;
++    return v;
++  });
++  return state.setIn(path, ImmutableMap({
++    next,
++    items: ImmutableOrderedSet(filteredReactions),
++    isLoading: false,
++  }));
++};
++
++const appendToList = (state, path, reactions, next) => {
++  const filteredReactions = reactions.map(v => {
++    v.account = v.account.id;
++    return v;
++  });
++  return state.updateIn(path, map => {
++    return map.set('next', next).set('isLoading', false).update('items', list => list.concat(filteredReactions));
++  });
++};
++
++/** @type {import('@reduxjs/toolkit').Reducer<typeof initialState>} */
++export default function statusReactions(state = initialState, action) {
++  switch(action.type) {
++  case REACTIONS_FETCH_SUCCESS:
++    return normalizeList(state, ['reactions', action.id], action.reactions, action.next);
++  case REACTIONS_EXPAND_SUCCESS:
++    return appendToList(state, ['reactions', action.id], action.reactions, action.next);
++  case REACTIONS_FETCH_REQUEST:
++  case REACTIONS_EXPAND_REQUEST:
++    return state.setIn(['reactions', action.id, 'isLoading'], true);
++  case REACTIONS_FETCH_FAIL:
++  case REACTIONS_EXPAND_FAIL:
++    return state.setIn(['reactions', action.id, 'isLoading'], false);
++  default:
++    return state;
++  }
++}
+diff --git a/app/javascript/flavours/glitch/reducers/statuses.js b/app/javascript/flavours/glitch/reducers/statuses.js
+index b9ee89369e..55e7c66f9e 100644
+--- a/app/javascript/flavours/glitch/reducers/statuses.js
++++ b/app/javascript/flavours/glitch/reducers/statuses.js
+@@ -13,6 +13,11 @@ import {
+   BOOKMARK_FAIL,
+   UNBOOKMARK_REQUEST,
+   UNBOOKMARK_FAIL,
++  REACTION_UPDATE,
++  REACTION_ADD_FAIL,
++  REACTION_REMOVE_FAIL,
++  REACTION_ADD_REQUEST,
++  REACTION_REMOVE_REQUEST,
+ } from '../actions/interactions';
+ import {
+   reblog,
+@@ -45,6 +50,43 @@ const deleteStatus = (state, id, references) => {
+   return state.delete(id);
+ };
+ 
++const updateReaction = (state, id, name, updater) => state.update(
++  id,
++  status => status.update(
++    'reactions',
++    reactions => {
++      const index = reactions.findIndex(reaction => reaction.get('name') === name);
++      if (index > -1) {
++        return reactions.update(index, reaction => updater(reaction));
++      } else {
++        return reactions.push(updater(fromJS({ name, count: 0 })));
++      }
++    },
++  ),
++);
++
++const updateReactionCount = (state, reaction) => updateReaction(state, reaction.status_id, reaction.name, x => x.set('count', reaction.count));
++
++// The url parameter is only used when adding a new custom emoji reaction
++// (one that wasn't in the reactions list before) because we don't have its
++// URL yet.  In all other cases, it's undefined.
++const addReaction = (state, id, name, url) => updateReaction(
++  state,
++  id,
++  name,
++  x => x.set('me', true)
++    .update('count', n => n + 1)
++    .update('url', old => old ? old : url)
++    .update('static_url', old => old ? old : url),
++);
++
++const removeReaction = (state, id, name) => updateReaction(
++  state,
++  id,
++  name,
++  x => x.set('me', false).update('count', n => n - 1),
++);
++
+ const statusTranslateSuccess = (state, id, translation) => {
+   return state.withMutations(map => {
+     map.setIn([id, 'translation'], fromJS(normalizeStatusTranslation(translation, map.get(id))).set('isLoading', false));
+@@ -123,6 +165,14 @@ export default function statuses(state = initialState, action) {
+     return state.get(action.status.get('id')) === undefined ? state : state.setIn([action.status.get('id'), 'bookmarked'], false);
+   case UNBOOKMARK_FAIL:
+     return state.get(action.status.get('id')) === undefined ? state : state.setIn([action.status.get('id'), 'bookmarked'], true);
++  case REACTION_UPDATE:
++    return updateReactionCount(state, action.reaction);
++  case REACTION_ADD_REQUEST:
++  case REACTION_REMOVE_FAIL:
++    return addReaction(state, action.id, action.name, action.url);
++  case REACTION_REMOVE_REQUEST:
++  case REACTION_ADD_FAIL:
++    return removeReaction(state, action.id, action.name);
+   case STATUS_MUTE_SUCCESS:
+     return state.setIn([action.id, 'muted'], true);
+   case STATUS_UNMUTE_SUCCESS:
+diff --git a/app/javascript/images/mailer-new/heading/reaction.png b/app/javascript/images/mailer-new/heading/reaction.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..8cfb73c69ec3e468da17af6ec50a3d6d537aa98a
+GIT binary patch
+literal 5759
+zcmeAS@N?(olHy`uVBq!ia0y~yU?>1#4rT@hhL3hEl?)6F7g8fU(>y)37&sUh7`PZ1
+z7+Dw?L24Kn7#NY*OpMG7AYE+?3=Bey%wRPjbyAG1V0I4!1A{b_J%xdRK?AA=q{onv
+ziGi1afng2<1A`GG6N3l?1H&o?28PUbh+X>_Ab^7b1asIJ7-Sh37+|!!r*D9Qk)EM}
+zp0Nc3gOP!eiIt&|m7#@#p{bRzrIn#M10w_D0)&e|X6c^jJIlbpSexnW9N_8ftWZ#t
+zpO%@E%D_-DXX->-52rwhw)xe%T>&jd9T__&m|hJM>`iTCVM}7m;=McH<Y4vG>Z#L?
+zEeOqck$y5OBXix>g{B-$bqcejXLUs><;jRnIj|t#lK;Ks`{UpDvOn?iGoQOH(_rl)
+zS?=~JE=EgB_B>cRJC5z+ie14oI^C4FtT}J3Qh2YgEAG$wnq#vTH!oqhTy;>dX$zN6
+zo(Ol-_lAaj>!cLsGAfrT&18D%_#&z|o;7`yPWL=UYq{C1mJAv*)vnEoh~MrzLA_x?
+zViennPATaobJp2AC&kSV&Uq2Ld74-&ACExVJk~`T8B<P7T6{tyQb$B4sfBavhwtHk
+z1HCeyoLIEjz+Fyw>nry^jQcm0UV5Co)$g9b7W>`rehZYmIZ%GHbbnvW_umpW{soz)
+ze|~cL)HW=?bD^pI!TqMstJ{{nJ#^IUi>+8l^ja@D2fyVH--^_DzS!Bg?rBus*J{6a
+ziu*VxX5X-Hc*yf3JnGHen{#f@&wusvFGEdR(W=#{{@WQCcq=kPB1$5BeXNr6bM+Ea
+z@{>~aDsn+dk%7U+zM>#8IXksPAt^OIGtXA({qFrr3YjUkO5vuy2EGN(sTr9bRYj@6
+zRemAKRoTgwDN6QsTs9R}6}bhusU?XD6}dTi#a0!zN?>!X@`|lM!um=IU?nBlwn`Dc
+z0SeCfMX3rVdM0`Xx~>(OWkyPNTnaWtDQQ+gE^bgGic->Sl`=|73as??%gf94%8m8%
+zi_-NCEiEne4UF`SjC6}q(sYX}^GXscbn}XpK}JB#a7isrF3Kz@$;{7F0GXMXlwVq6
+ztE9xGpr8OXydt;2*B5SlUNJNjlJj%*D-sLz4fPE4b942PbrhGlmX+YwQ5;fPkg6Y)
+zTAW{6l$`2XmYP?hjBG?oGF*Q_X;BW?J1NQfsX3{+sd**E`i6RjC{}{98e9h`2+}ii
+z3&6T6atlyYmSm<O0t>}AAQ`ZCkR4KyTL3o~MK#RtV8!4tvU15!E(JNy)5TT^WWQBP
+zesX4t6_}Z3YHXaAm};P#VxDNCYhq!Tq-&9CX`ySGl4xO^mSkp-l#+~OlxJRXNn&1d
+zD#)mc+ycGK%oHorG;>R%)FcyKvn10rU6Uk3OWj06vm{*$lO!{vWaH#y)1)*cBm9dp
+z(=+oDbC6vHGAboA#mXqrB+)R%*j(2*#l%?GB+1l5H!&sEMAtOMz}zgw(8$Or%@}M{
+zO0tz(eo<~>iLFv*Zen_>enDP3SOOH_R*nIlwn|2N1_+UWoWzo}{Gwc2C7;Z^(h7t`
+zNM>$oa7iL4G!4y-O-xPAEzL|#%}k6eAQpkm3rj63&dkpPnF%g5!P-I5V&z|ynVMIU
+z2ui26N`_$ZirfM#=c3falKi5O{QMkSC6E!|;ubFLn_7~Xl30@Hl30>ztAr?kLtq84
+zu7R1A0mS(r<9zc|GSeyvskQ@U4jV|6dt?@u<QG+fg&;X9IJFSMgK%>)L8=uL6u_Cn
+zDlr-2h2q4r)D*Bg;Zn&NiFxU%DYi<`<O<W0i6to{CL1N0n46jE8XG32>6%!ir06CY
+zm?h~ZC#M>x87EtqCYwT16WsLT{Irtt#G+Kk^whi(TP63*+yZb|DQJKrN)y#B<r%4<
+zSTHa$(KR&EHMD>Rn2{+o!1N(rw9yBZ889E)=wpNlL;+GEW5=Zc5ess0v*WVS2bXl9
+zQV(JvsMMh)hQ<Xgtx!-HwS=Vb9SyG0;36pmNK!nSx<-SGq!1uU@o4IzT5xe8x>Kon
+zDYi=GO7?bqJW2`-3=EtF9+AZi3}UJv%;*`U@_~VYfxX1j*OmPRkC3Rk<k|$Q6b1&y
+z#{oVet_%ze2?_rb3jP-q{7=aEpONuDIr)Eb8VDsN{ZC5$pPKqVDdm4k%Kwx!uvF^*
+z<kbJkDIhWx!T`%AgUOWC|4GR(Who$KDXIT6GXH00{m;$&pO^nXzu<pC;s3&-|3$_B
+zi%b5Ol>RR(`(IxEzoO!QW##{>s{b`L|7&ai*Vq5AZ}{KP_`kX3e_Q+i&aVGm-T%9L
+z{`d6$@9q8H*Z+UQ#Qzf~{+~4I|D?(PCr|l5W$ORwGycz<^?%mv|FdWRpELLW+<E`!
+z&HF!p!T*Je{x4eefAQk~i<kUgvh@GbrT<r~_`h=H|COu$uUh?o_3Hm?*8E?)_W#;-
+z|JSYizkdDyjT`@O+Vp?xw*T9<{olU*|MngKckKATW9R=}yZ-Oq{eSnK|9kfQ-?R7s
+zzJ34qANYUZ!2bgW{~tW~|InfThY$Zha^(NfqyLW{`+w}%|6|AhpE&XV<jMc1PW?Y~
+z=KtBV|IeTQfAQk~D_8zsz54&!wg1<z|G#<j|E*j9Z{PlZ`_BJ6cmChG`~U9U|M%|w
+zfAHY{<H!G>Jo*3h>Hn86|G#?m|MlztZ{GZW`}Y64cmLnN|Nr5`|BoO4fByXc%a{LO
+zzyAOB?f>`h|9|}W|MTbnU%&qU{{8>YpZ|aV{{Q#y|NsC0XMJG!%fP@OUlQaO%pf2j
+zpr8;C5TB5cP~Xr$VZ!_c>(_7CzyJLC^Y`!Hf6r<+MG!O|l;rL1vLNpAz6A^nEPS3W
+zjv*QM-ro8dE*vhx{-ON{tBTfDrbTCXlYAy9JZS2Qj$X=rBdL39)N0p*yp92a(@z*V
+zbxB3dQaF|}<IH#exBQNhoBhu1*=hf!p#IeC>66b_e&1WU`3cuVxuvPm+ujGAsC%>O
+zR?xmUk&a7UT9c$qE6-lyYJK9K>UT-7uVaOh_V#_#WV(0hG~Zb=p?P7>2@iEk8PPLw
+zvvy3BNSd6vS3_pOrd>s^I#jbH)D1-6O>HTvTr!12v1LUHbFlLh=?A9-PD?r#aVwS;
+zHHGexR9z%=uSY0XEV}aG+C^RBe}djTV|~rC-kr<bBm05W4|~?{a_@g_-TisCn%IXU
+z4lkI)k^*I|p6R@h?@-b`v^`3OdG`EFhJ-)1KT{qQ-G4iAWd|d}E$8{l3!e8&Fw{P}
+z)Oa;{U-xFKh8w*7H6K1mGk71C{K<W%mw86^G~Rht>?-rq&(6*FV4imFBx|*aLXA;)
+z{&A)S|5b$Fcrpd^?)<%Xa>G4Uew($7$v>|jmDq4cliTJ8pM>_8rG*b_yH!4z8pIad
+zt!{Gg;HwbjFps#A@SpWpN<*W>r1Ujs&Uwmqs&PIrPPlWcOP<y3ZSy~tX?w06IA$Tl
+zcss%V!+}@ZOnG>2u_<5Bjj#V>_3Ukv?17fA+2?sK<O#oFuQN7%ef-$>fOp^CAF!SM
+zK!>N;t)8WB*`3_@O%G1SbM!ovFW#)Xt3o5*x@m>&1#Ta);^RilhqJkDvVN}dKdSsd
+zJ32x9LOf4}^p9&|Ke!9FN_<eekjibtAEVE<hi%Sw)-tB@E=K*^vJWK_maJIb_uz9?
+z^n<#DuJ1211qI^*S|6sfwl{Rom(AFlFl)&#?zNi^E<TWR>+8q2>Px=ne&p1zVB}M-
+zJaDIv>ErKQ7nfY;LXkVGyV=<rc0c<zv6A7~p*we)7!_)s1iSw}9jBSl-Nyg>EW4DO
+zko^2QVdZ7NuTH=4<jyPmGdmJk*0nD>efr|f?8fugjh{5^lla2Ny<dfQiS&U(c77K=
+zPha}iSI*;XnB4W0rjjuBc~ugQuP!z|xc8>^t?;T<t5)q|Sz@<huTY#;&3eX(>o=FN
+zUcT@9)Lwq=KC_oK{4e^YHh=k|x4hX=Q@<_BiQ&=Vx_Oo=N{j3tGklq;ZKpRu%3YXY
+zLeHM6n$7FqpRzmdxM<nIpI2ATN?_<*QERXzgMlILLxYRUz03DY%l~g^=RYHL*`VTJ
+zobHZq`;SV!;8{`7{HES2|2gaGpWN)HDh?I}9^&4`lAr6cR^ZUt*@22)BKLYW@ofy^
+zxTm-)s5Lk5nUj@b){bpk`yW2iY%5tiEq+r-Qm%>kj9rrI6Ff_ni*x1|Y}2SLPLten
+z`rxK(QQ_CT@|Ry)wWE0IrrrArTB4^fkGdbKw^L%XmHzgmyw%eR)0e)vw{fjb@NfQb
+Xhh-;n)`ffpjlO!i`njxgN@xNA*&_wN
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/javascript/images/mailer/icon_add.png b/app/javascript/images/mailer/icon_add.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..93263cffd8af13df492a1b093910a8e0badaa553
+GIT binary patch
+literal 1417
+zcmeAS@N?(olHy`uVBq!ia0y~yU^oE69Bd2>3_*8t*cliYI14-?iy0WoWI&j4`Jswe
+z3=9mCC9V-A!TD(=<%vb94CUqJdYO6I#mR{Use1WE>9gP2NHH+5ig~&?hEy=Vy&ISn
+z8_mOV(W2sCaM=kSo<lh&x85s1H*Htc(Z45^<>TYy>;JSnOg(Tvt6-<#5B~;+cM84@
+z3@?ARsy9e`2rD@3s(Z-!fb9|s$Aoq96-+xCO&FP$ycVCwkT=Mb{qX0gn{(iceA2%k
+zA9)Wm|6yu5Eq-^u@Ef*AEPt4e@Gp>?&+wJI<GH%SABI;SIRo}LRMd?i;s2i*8rCyg
+z|9jGP{d4^vl{qhO*D)?*sjZ*I!02~9{ih})lMm;we<qAfbJm^z6wJgjL+H!jOePkK
+z*!fSFvv3%wzW9Bag`;4X-D!VLfdsD$-<NX=JSeH1HeX2Lz?22={e=|{y!@qOuj<gC
+z>3Dy>nnT0ouaR|L4Gh6e`|N!m9Qx0{;n(}g^^5<$y#IXvy#LZ2_x=j*XLx^O_MQd?
+zMzJXgt>r8nANuy5<mM1aaO4cDaBmouBr6bV^lm)dzW&3<+stw2o{K*ysxFfkRyZKB
+zkX=t$;lR^xZ|u|@8VsHIW7HfPPQSfb>(juH+#<Kbr-5Pm?ajYuFfbnDuq~L$z^J!9
+z{ktI}Q;%TP10zPJn7s4vl9^Z}l)oHEWn$TJXWrf8EF1=IFB(s?a1`vc-QCYAkkE61
+hc{-=SpttaVJ>OK0Hiu2TstgPa44$rjF6*2UngDYyNC5x<
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/javascript/mastodon/components/status/legacy/action_bar/index.jsx b/app/javascript/mastodon/components/status/legacy/action_bar/index.jsx
+index 2be48da81a..b1dd401b9a 100644
+--- a/app/javascript/mastodon/components/status/legacy/action_bar/index.jsx
++++ b/app/javascript/mastodon/components/status/legacy/action_bar/index.jsx
+@@ -417,6 +417,7 @@ class StatusActionBar extends ImmutablePureComponent {
+               needsStatusRefresh={quickBoosting && status.get('quote_approval') === null}
+               items={menu}
+               direction='right'
++              // eslint-disable-next-line react/jsx-no-bind
+               onOpen={() => {
+                 dismissQuoteHint();
+                 return true;
+diff --git a/app/javascript/mastodon/features/notifications/components/notification.jsx b/app/javascript/mastodon/features/notifications/components/notification.jsx
+index 05cf237248..b73485338c 100644
+--- a/app/javascript/mastodon/features/notifications/components/notification.jsx
++++ b/app/javascript/mastodon/features/notifications/components/notification.jsx
+@@ -489,10 +489,10 @@ class Notification extends ImmutablePureComponent {
+     }
+ 
+     const targetAccount = report.get('target_account');
+-    const targetLink = <LinkedDisplayName
++    const targetLink = (<LinkedDisplayName
+       className='notification__display-name'
+       displayProps={{account:targetAccount, variant: 'simple'}}
+-    />;
++    />);
+ 
+     return (
+       <Hotkeys handlers={this.getHandlers()}>
+diff --git a/app/javascript/mastodon/features/notifications/requests.jsx b/app/javascript/mastodon/features/notifications/requests.jsx
+index 10f866c389..f660b9e213 100644
+--- a/app/javascript/mastodon/features/notifications/requests.jsx
++++ b/app/javascript/mastodon/features/notifications/requests.jsx
+@@ -19,11 +19,11 @@ import {
+ } from 'mastodon/actions/notification_requests';
+ import { changeSetting } from 'mastodon/actions/settings';
+ import { CheckBox } from 'mastodon/components/check_box';
++import { Dropdown } from 'mastodon/components/dropdown_menu';
+ import { Column } from '@/mastodon/components/column';
+ import { ColumnHeader as LegacyColumnHeader } from '@/mastodon/components/column/header';
+ import { Icon } from 'mastodon/components/icon';
+ import ScrollableList from 'mastodon/components/scrollable_list';
+-import { Dropdown } from 'mastodon/components/dropdown_menu';
+ 
+ import { NotificationRequest } from './components/notification_request';
+ import { PolicyControls } from './components/policy_controls';
+diff --git a/app/javascript/mastodon/features/status/components/action_bar.jsx b/app/javascript/mastodon/features/status/components/action_bar.jsx
+index 570795c181..6ed804355a 100644
+--- a/app/javascript/mastodon/features/status/components/action_bar.jsx
++++ b/app/javascript/mastodon/features/status/components/action_bar.jsx
+@@ -92,6 +92,7 @@ class ActionBar extends PureComponent {
+     onBookmark: PropTypes.func.isRequired,
+     onDelete: PropTypes.func.isRequired,
+     onRevokeQuote: PropTypes.func,
++    onQuote: PropTypes.func,
+     onQuotePolicyChange: PropTypes.func,
+     onEdit: PropTypes.func.isRequired,
+     onDirect: PropTypes.func.isRequired,
+diff --git a/app/javascript/material-icons/400-24px/add_reaction-fill.svg b/app/javascript/material-icons/400-24px/add_reaction-fill.svg
+new file mode 100644
+index 0000000000..3ea1c30a52
+--- /dev/null
++++ b/app/javascript/material-icons/400-24px/add_reaction-fill.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M800-680v-80h-80v-80h80v-80h80v80h80v80h-80v80h-80ZM620-520q25 0 42.5-17.5T680-580q0-25-17.5-42.5T620-640q-25 0-42.5 17.5T560-580q0 25 17.5 42.5T620-520Zm-280 0q25 0 42.5-17.5T400-580q0-25-17.5-42.5T340-640q-25 0-42.5 17.5T280-580q0 25 17.5 42.5T340-520Zm140 260q68 0 123.5-38.5T684-400H276q25 63 80.5 101.5T480-260Zm0 180q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q43 0 83 8.5t77 24.5v167h80v80h142q9 29 13.5 58.5T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"/></svg>
+\ No newline at end of file
+diff --git a/app/javascript/material-icons/400-24px/add_reaction.svg b/app/javascript/material-icons/400-24px/add_reaction.svg
+new file mode 100644
+index 0000000000..77aace24b0
+--- /dev/null
++++ b/app/javascript/material-icons/400-24px/add_reaction.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-480Zm0 400q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q43 0 83 8.5t77 24.5v90q-35-20-75.5-31.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160q133 0 226.5-93.5T800-480q0-32-6.5-62T776-600h86q9 29 13.5 58.5T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm320-600v-80h-80v-80h80v-80h80v80h80v80h-80v80h-80ZM620-520q25 0 42.5-17.5T680-580q0-25-17.5-42.5T620-640q-25 0-42.5 17.5T560-580q0 25 17.5 42.5T620-520Zm-280 0q25 0 42.5-17.5T400-580q0-25-17.5-42.5T340-640q-25 0-42.5 17.5T280-580q0 25 17.5 42.5T340-520Zm140 260q68 0 123.5-38.5T684-400H276q25 63 80.5 101.5T480-260Z"/></svg>
+\ No newline at end of file
+diff --git a/app/lib/activitypub/activity.rb b/app/lib/activitypub/activity.rb
+index 60aef4d13d..4ce9f68bfd 100644
+--- a/app/lib/activitypub/activity.rb
++++ b/app/lib/activitypub/activity.rb
+@@ -39,6 +39,8 @@ class ActivityPub::Activity
+         ActivityPub::Activity::Follow
+       when 'Like'
+         ActivityPub::Activity::Like
++      when 'EmojiReact'
++        ActivityPub::Activity::EmojiReact
+       when 'Block'
+         ActivityPub::Activity::Block
+       when 'Update'
+@@ -189,4 +191,32 @@ class ActivityPub::Activity
+     Rails.logger.info("Rejected #{@json['type']} activity #{@json['id']} from #{@account.uri}#{@options[:relayed_through_actor] && "via #{@options[:relayed_through_actor].uri}"}")
+     nil
+   end
++
++  # Ensure emoji declared in the activity's tags are
++  # present in the database and downloaded to the local cache.
++  # Required by EmojiReact and Like for emoji reactions.
++  def process_emoji_tags(name, tags)
++    tag = as_array(tags).find { |item| item['type'] == 'Emoji' }
++    return if tag.nil?
++
++    custom_emoji_parser = ActivityPub::Parser::CustomEmojiParser.new(tag)
++    return if custom_emoji_parser.shortcode.blank? || custom_emoji_parser.image_remote_url.blank? || !name.eql?(custom_emoji_parser.shortcode)
++
++    emoji = CustomEmoji.find_by(shortcode: custom_emoji_parser.shortcode, domain: @account.domain)
++    return emoji unless emoji.nil? ||
++                        custom_emoji_parser.image_remote_url != emoji.image_remote_url ||
++                        (custom_emoji_parser.updated_at && custom_emoji_parser.updated_at >= emoji.updated_at)
++
++    begin
++      emoji ||= CustomEmoji.new(domain: @account.domain,
++                                shortcode: custom_emoji_parser.shortcode,
++                                uri: custom_emoji_parser.uri)
++      emoji.image_remote_url = custom_emoji_parser.image_remote_url
++      emoji.save
++    rescue Seahorse::Client::NetworkingError => e
++      Rails.logger.warn "Error fetching emoji: #{e}"
++      return
++    end
++    emoji
++  end
+ end
+diff --git a/app/lib/activitypub/activity/emoji_react.rb b/app/lib/activitypub/activity/emoji_react.rb
+new file mode 100644
+index 0000000000..02a6b0ce06
+--- /dev/null
++++ b/app/lib/activitypub/activity/emoji_react.rb
+@@ -0,0 +1,28 @@
++# frozen_string_literal: true
++
++class ActivityPub::Activity::EmojiReact < ActivityPub::Activity
++  CUSTOM_EMOJI_REGEX = /^:[^:]+:$/
++
++  def perform
++    original_status = status_from_uri(object_uri)
++    name = Emoji.normalize(@json['content'].dup)
++    return if original_status.nil? ||
++              !original_status.account.local? ||
++              delete_arrived_first?(@json['id'])
++
++    if CUSTOM_EMOJI_REGEX.match?(name)
++      name.delete! ':'
++      custom_emoji = process_emoji_tags(name, @json['tag'])
++
++      return if custom_emoji.nil?
++    end
++
++    return if @account.reacted?(original_status, name, custom_emoji)
++
++    reaction = original_status.status_reactions.create!(account: @account, name: name, custom_emoji: custom_emoji)
++
++    LocalNotificationWorker.perform_async(original_status.account_id, reaction.id, 'StatusReaction', 'reaction')
++  rescue ActiveRecord::RecordInvalid
++    nil
++  end
++end
+diff --git a/app/lib/activitypub/activity/like.rb b/app/lib/activitypub/activity/like.rb
+index aa1dc30403..01d52fa514 100644
+--- a/app/lib/activitypub/activity/like.rb
++++ b/app/lib/activitypub/activity/like.rb
+@@ -1,14 +1,43 @@
+ # frozen_string_literal: true
+ 
+ class ActivityPub::Activity::Like < ActivityPub::Activity
++  CUSTOM_EMOJI_REGEX = /^:[^:]+:$/
++
+   def perform
+     original_status = status_from_uri(object_uri)
++    return if original_status.nil? || !original_status.account.local? || delete_arrived_first?(@json['id'])
++
++    return if maybe_process_embedded_reaction
+ 
+-    return if original_status.nil? || !original_status.account.local? || delete_arrived_first?(@json['id']) || @account.favourited?(original_status)
++    return if @account.favourited?(original_status)
+ 
+     favourite = original_status.favourites.create!(account: @account)
+ 
+     LocalNotificationWorker.perform_async(original_status.account_id, favourite.id, 'Favourite', 'favourite')
+     Trends.statuses.register(original_status)
+   end
++
++  # Some servers deliver reactions as likes with the emoji in content
++  # Versions of Misskey before 12.1.0 specify emojis in _misskey_reaction instead, so we check both
++  # See https://misskey-hub.net/ns.html#misskey-reaction for details
++  def maybe_process_embedded_reaction
++    original_status = status_from_uri(object_uri)
++    name = Emoji.normalize((@json['content'] || @json['_misskey_reaction']).dup)
++    return false if name.nil?
++
++    if CUSTOM_EMOJI_REGEX.match?(name)
++      name.delete! ':'
++      custom_emoji = process_emoji_tags(name, @json['tag'])
++
++      return false if custom_emoji.nil? # invalid custom emoji, treat it as a regular like
++    end
++    return true if @account.reacted?(original_status, name, custom_emoji)
++
++    reaction = original_status.status_reactions.create!(account: @account, name: name, custom_emoji: custom_emoji)
++    LocalNotificationWorker.perform_async(original_status.account_id, reaction.id, 'StatusReaction', 'reaction')
++    true
++  # account tried to react with disabled custom emoji. Returning true to discard activity.
++  rescue ActiveRecord::RecordInvalid
++    true
++  end
+ end
+diff --git a/app/lib/activitypub/activity/undo.rb b/app/lib/activitypub/activity/undo.rb
+index 9eff1b71c9..9f3fabf7e2 100644
+--- a/app/lib/activitypub/activity/undo.rb
++++ b/app/lib/activitypub/activity/undo.rb
+@@ -1,6 +1,8 @@
+ # frozen_string_literal: true
+ 
+ class ActivityPub::Activity::Undo < ActivityPub::Activity
++  CUSTOM_EMOJI_REGEX = /^:[^:]+:$/
++
+   def perform
+     case @object['type']
+     when 'Announce'
+@@ -11,6 +13,8 @@ class ActivityPub::Activity::Undo < ActivityPub::Activity
+       undo_follow
+     when 'Like'
+       undo_like
++    when 'EmojiReact'
++      undo_emoji_react
+     when 'Block'
+       undo_block
+     when nil
+@@ -108,6 +112,31 @@ class ActivityPub::Activity::Undo < ActivityPub::Activity
+     if @account.favourited?(status)
+       favourite = status.favourites.where(account: @account).first
+       favourite&.destroy
++    elsif @object['content'].present? || @object['_misskey_reaction'].present?
++      undo_emoji_react
++    else
++      delete_later!(object_uri)
++    end
++  end
++
++  def undo_emoji_react
++    name = (@object['content'] || @object['_misskey_reaction']).dup
++    return if name.nil?
++
++    status = status_from_uri(target_uri)
++
++    return if status.nil? || !status.account.local?
++
++    if CUSTOM_EMOJI_REGEX.match?(name)
++      name.delete! ':'
++      custom_emoji = process_emoji_tags(name, @object['tag'])
++
++      return if custom_emoji.nil?
++    end
++
++    if @account.reacted?(status, name, custom_emoji)
++      reaction = status.status_reactions.where(account: @account, name: name).first
++      reaction&.destroy
+     else
+       delete_later!(object_uri)
+     end
+diff --git a/app/lib/emoji.rb b/app/lib/emoji.rb
+new file mode 100644
+index 0000000000..05390be118
+--- /dev/null
++++ b/app/lib/emoji.rb
+@@ -0,0 +1,17 @@
++# frozen_string_literal: true
++
++class Emoji
++  TEXT_PRESENTATIONS = [
++    '#', '*', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '©', '®', '‼', '⁉', '™', 'ℹ', '↔', '↕', '↖', '↗', '↘', '↙', '↩', '↪', '⌨', '⏏', '⏭', '⏮', '⏯', '⏱', '⏲', '⏸', '⏹', '⏺', 'Ⓜ', '▪', '▫', '▶', '◀', '◻', '◼', '☀', '☁', '☂', '☃', '☄', '☎', '☑', '☘', '☝', '☠', '☢', '☣', '☦', '☪', '☮', '☯',
++    '☸', '☹', '☺', '♀', '♂', '♟', '♠', '♣', '♥', '♦', '♨', '♻', '♾', '⚒', '⚔', '⚕', '⚖', '⚗', '⚙', '⚛', '⚜', '⚠', '⚧', '⚰', '⚱', '⛈', '⛏', '⛑', '⛓', '⛩', '⛰', '⛱', '⛴', '⛷', '⛸', '⛹', '✂', '✈', '✉', '✌', '✍', '✏', '✒', '✔', '✖', '✝', '✡', '✳', '✴', '❄', '❇', '❣', '❤', '➡', '⤴', '⤵', '⬅', '⬆', '⬇',
++    '〰', '〽', '㊗', '㊙', '🅰', '🅱', '🅾', '🅿', '🈂', '🈷', '🌡', '🌤', '🌥', '🌦', '🌧', '🌨', '🌩', '🌪', '🌫', '🌬', '🌶', '🍽', '🎖', '🎗', '🎙', '🎚', '🎛', '🎞', '🎟', '🏋', '🏌', '🏍', '🏎', '🏔', '🏕', '🏖', '🏗', '🏘', '🏙', '🏚', '🏛', '🏜', '🏝', '🏞', '🏟', '🏳', '🏵', '🏷', '🐿', '👁',
++    '📽', '🕉', '🕊', '🕯', '🕰', '🕳', '🕴', '🕵', '🕶', '🕷', '🕸', '🕹', '🖇', '🖊', '🖋', '🖌', '🖍', '🖐', '🖥', '🖨', '🖱', '🖲', '🖼', '🗂', '🗃', '🗄', '🗑', '🗒', '🗓', '🗜', '🗝', '🗞', '🗡', '🗣', '🗨', '🗯', '🗳', '🗺', '🛋', '🛍', '🛎', '🛏', '🛠', '🛡', '🛢', '🛣', '🛤', '🛥', '🛩', '🛰', '🛳'
++  ].freeze
++
++  class << self
++    def normalize(char)
++      char += 0xfe0f.chr if TEXT_PRESENTATIONS.include?(char)
++      char
++    end
++  end
++end
+diff --git a/app/lib/status_cache_hydrator.rb b/app/lib/status_cache_hydrator.rb
+index c2cfc9243b..ec84e65b9f 100644
+--- a/app/lib/status_cache_hydrator.rb
++++ b/app/lib/status_cache_hydrator.rb
+@@ -59,6 +59,7 @@ class StatusCacheHydrator
+     payload[:bookmarked] = Bookmark.exists?(account_id: account.id, status_id: status.id)
+     payload[:pinned]     = StatusPin.exists?(account_id: account.id, status_id: status.id) if status.account_id == account.id
+     payload[:filtered]   = mapped_applied_custom_filter(account, status)
++    payload[:reactions]  = serialized_reactions(account.id, status)
+     payload[:quote_approval][:current_user] = status.quote_policy_for_account(account) if payload[:quote_approval]
+     payload[:quote] = hydrate_quote_payload(payload[:quote], status.quote, account, nested:) if payload[:quote]
+ 
+@@ -142,6 +143,16 @@ class StatusCacheHydrator
+     ).as_json
+   end
+ 
++  def serialized_reactions(account_id, status)
++    reactions = status.reactions(account_id)
++    ActiveModelSerializers::SerializableResource.new(
++      reactions,
++      each_serializer: REST::StatusReactionSerializer,
++      scope: account_id, # terrible
++      scope_name: :current_user
++    ).as_json
++  end
++
+   def payload_application
+     @status.application.present? ? serialized_status_application_json : nil
+   end
+diff --git a/app/mailers/notification_mailer.rb b/app/mailers/notification_mailer.rb
+index db9218619a..221ba42719 100644
+--- a/app/mailers/notification_mailer.rb
++++ b/app/mailers/notification_mailer.rb
+@@ -6,11 +6,11 @@ class NotificationMailer < ApplicationMailer
+          :routing
+ 
+   before_action :process_params
+-  with_options only: %i(mention favourite reblog quote) do
++  with_options only: %i(mention favourite reaction reblog quote) do
+     before_action :set_status
+     after_action :thread_by_conversation!
+   end
+-  before_action :set_account, only: [:follow, :favourite, :reblog, :follow_request]
++  before_action :set_account, only: [:follow, :favourite, :reaction, :reblog, :follow_request]
+   after_action :set_list_headers!
+ 
+   before_deliver :verify_functional_user
+@@ -39,6 +39,14 @@ class NotificationMailer < ApplicationMailer
+     mail subject: default_i18n_subject(name: @account.acct)
+   end
+ 
++  def reaction
++    return if @status.blank?
++
++    locale_for_account(@me) do
++      mail subject: default_i18n_subject(name: @account.acct)
++    end
++  end
++
+   def reblog
+     mail subject: default_i18n_subject(name: @account.acct)
+   end
+diff --git a/app/models/concerns/account/associations.rb b/app/models/concerns/account/associations.rb
+index 82c1b8a886..29d8d07ca7 100644
+--- a/app/models/concerns/account/associations.rb
++++ b/app/models/concerns/account/associations.rb
+@@ -37,6 +37,7 @@ module Account::Associations
+         has_many :reports
+         has_many :scheduled_statuses
+         has_many :status_pins
++        has_many :status_reactions
+         has_many :statuses
+         has_many :keypairs
+         has_many :email_subscriptions
+diff --git a/app/models/concerns/account/interactions.rb b/app/models/concerns/account/interactions.rb
+index 308bd4c9a7..c1ffa217bf 100644
+--- a/app/models/concerns/account/interactions.rb
++++ b/app/models/concerns/account/interactions.rb
+@@ -196,6 +196,10 @@ module Account::Interactions
+     status.proper.favourites.exists?(account: self)
+   end
+ 
++  def reacted?(status, name, custom_emoji = nil)
++    status.proper.status_reactions.exists?(account: self, name: name, custom_emoji: custom_emoji)
++  end
++
+   def bookmarked?(status)
+     status.proper.bookmarks.exists?(account: self)
+   end
+diff --git a/app/models/concerns/notification/groups.rb b/app/models/concerns/notification/groups.rb
+index f902952c61..ce3094bb4c 100644
+--- a/app/models/concerns/notification/groups.rb
++++ b/app/models/concerns/notification/groups.rb
+@@ -4,7 +4,7 @@ module Notification::Groups
+   extend ActiveSupport::Concern
+ 
+   # `set_group_key!` needs to be updated if this list changes
+-  GROUPABLE_NOTIFICATION_TYPES = %i(favourite reblog follow admin.sign_up).freeze
++  GROUPABLE_NOTIFICATION_TYPES = %i(favourite reaction reblog follow admin.sign_up).freeze
+   MAXIMUM_GROUP_SPAN_HOURS = 12
+ 
+   included do
+@@ -15,7 +15,7 @@ module Notification::Groups
+     return if filtered? || GROUPABLE_NOTIFICATION_TYPES.exclude?(type)
+ 
+     type_prefix = case type
+-                  when :favourite, :reblog
++                  when :favourite, :reaction, :reblog
+                     [type, target_status&.id].join('-')
+                   when :follow, :'admin.sign_up'
+                     type
+diff --git a/app/models/concerns/user/has_settings.rb b/app/models/concerns/user/has_settings.rb
+index a613e58f85..a1ddf8bff1 100644
+--- a/app/models/concerns/user/has_settings.rb
++++ b/app/models/concerns/user/has_settings.rb
+@@ -139,6 +139,10 @@ module User::HasSettings
+     settings['hide_followers_count']
+   end
+ 
++  def setting_visible_reactions
++    integer_cast_setting('visible_reactions', 0)
++  end
++
+   def setting_default_quote_policy
+     settings['default_quote_policy'] || 'public'
+   end
+@@ -186,4 +190,14 @@ module User::HasSettings
+   def hide_all_media?
+     settings['web.display_media'] == 'hide_all'
+   end
++
++  def integer_cast_setting(key, min = nil, max = nil)
++    i = ActiveModel::Type::Integer.new.cast(settings[key])
++    # the cast above doesn't return a number if passed the string "e"
++    i = 0 unless i.is_a? Numeric
++    return min if !min.nil? && i < min
++    return max if !max.nil? && i > max
++
++    i
++  end
+ end
+diff --git a/app/models/notification.rb b/app/models/notification.rb
+index a8fb5e53bd..6eac3199ca 100644
+--- a/app/models/notification.rb
++++ b/app/models/notification.rb
+@@ -29,6 +29,7 @@ class Notification < ApplicationRecord
+     'Follow' => :follow,
+     'FollowRequest' => :follow_request,
+     'Favourite' => :favourite,
++    'StatusReaction' => :reaction,
+     'Poll' => :poll,
+     'Quote' => :quote,
+   }.freeze
+@@ -59,6 +60,9 @@ class Notification < ApplicationRecord
+       filterable: true,
+       baseline: true,
+     }.freeze,
++    reaction: {
++      filterable: true,
++    }.freeze,
+     poll: {
+       filterable: false,
+       baseline: true,
+@@ -113,6 +117,7 @@ class Notification < ApplicationRecord
+     mention: [mention: :status],
+     quote: [quote: :status],
+     favourite: [favourite: :status],
++    reaction: [status_reaction: :status],
+     poll: [poll: :status],
+     update: :status,
+     quoted_update: :status,
+@@ -129,6 +134,7 @@ class Notification < ApplicationRecord
+     belongs_to :follow, inverse_of: :notification
+     belongs_to :follow_request, inverse_of: :notification
+     belongs_to :favourite, inverse_of: :notification
++    belongs_to :status_reaction, inverse_of: :notification
+     belongs_to :poll, inverse_of: false
+     belongs_to :report, inverse_of: false
+     belongs_to :account_relationship_severance_event, inverse_of: false
+@@ -155,6 +161,8 @@ class Notification < ApplicationRecord
+       status&.reblog
+     when :favourite
+       favourite&.status
++    when :reaction
++      status_reaction&.status
+     when :mention
+       mention&.status
+     when :quote
+@@ -216,6 +224,8 @@ class Notification < ApplicationRecord
+           notification.status.reblog = cached_status
+         when :favourite
+           notification.favourite.status = cached_status
++        when :reaction
++          notification.reaction.status = cached_status
+         when :mention
+           notification.mention.status = cached_status
+         when :poll
+@@ -229,6 +239,8 @@ class Notification < ApplicationRecord
+     end
+   end
+ 
++  alias reaction status_reaction
++
+   after_initialize :set_from_account
+   before_validation :set_from_account
+ 
+@@ -242,7 +254,7 @@ class Notification < ApplicationRecord
+     case activity_type
+     when 'Status'
+       self.from_account_id = type == :quoted_update ? activity&.quote&.quoted_account_id : activity&.account_id
+-    when 'Follow', 'Favourite', 'FollowRequest', 'Poll', 'Report', 'Quote', 'Collection'
++    when 'Follow', 'Favourite', 'StatusReaction', 'FollowRequest', 'Poll', 'Report', 'Quote', 'Collection'
+       self.from_account_id = activity&.account_id
+     when 'CollectionItem'
+       self.from_account_id = activity&.collection&.account_id
+diff --git a/app/models/notification_group.rb b/app/models/notification_group.rb
+index 1d43536443..1e0beedd96 100644
+--- a/app/models/notification_group.rb
++++ b/app/models/notification_group.rb
+@@ -53,6 +53,7 @@ class NotificationGroup < ActiveModelSerializers::Model
+            :account_relationship_severance_event,
+            :account_warning,
+            :generated_annual_report,
++           :status_reaction,
+            to: :notification, prefix: false
+ 
+   class << self
+diff --git a/app/models/status.rb b/app/models/status.rb
+index a8d162d82a..b34d42cc98 100644
+--- a/app/models/status.rb
++++ b/app/models/status.rb
+@@ -96,6 +96,7 @@ class Status < ApplicationRecord
+   has_many :mentions, dependent: :destroy, inverse_of: :status
+   has_many :mentioned_accounts, through: :mentions, source: :account, class_name: 'Account'
+   has_many :media_attachments, dependent: :nullify
++  has_many :status_reactions, inverse_of: :status, dependent: :destroy
+   has_many :tagged_objects, dependent: :destroy
+   has_many :quotes, foreign_key: 'quoted_status_id', inverse_of: :quoted_status, dependent: :nullify
+ 
+@@ -144,7 +145,7 @@ class Status < ApplicationRecord
+   scope :without_reblogs, -> { where(statuses: { reblog_of_id: nil }) }
+   scope :tagged_with, ->(tag_ids) { joins(:statuses_tags).where(statuses_tags: { tag_id: tag_ids }) }
+   scope :not_excluded_by_account, ->(account) { where.not(account_id: account.excluded_from_timeline_account_ids) }
+-  scope :not_domain_blocked_by_account, ->(account) { account.excluded_from_timeline_domains.blank? ? left_outer_joins(:account) : left_outer_joins(:account).merge(Account.not_domain_blocked_by_account(account)) }
++  scope :not_domain_blocked_by_account, ->(account, bubble_only = false) { account.excluded_from_timeline_domains.blank? ? left_outer_joins(:account) : left_outer_joins(:account).merge(Account.not_domain_blocked_by_account(account, bubble_only)) }
+   scope :tagged_with_all, lambda { |tag_ids|
+     Array(tag_ids).map(&:to_i).reduce(self) do |result, id|
+       result.where(<<~SQL.squish, tag_id: id)
+@@ -159,6 +160,8 @@ class Status < ApplicationRecord
+ 
+   scope :not_local_only, -> { where(local_only: [false, nil]) }
+ 
++  scope :bubble, -> { left_outer_joins(:account).where(accounts: { domain: BubbleDomain.bubble_domains }) }
++
+   after_create_commit :trigger_create_webhooks
+   after_update_commit :trigger_update_webhooks
+ 
+@@ -214,6 +217,10 @@ class Status < ApplicationRecord
+     attributes['local'] || uri.nil?
+   end
+ 
++  def bubble?
++    BubbleDomain.in_bubble?(account.domain)
++  end
++
+   def in_reply_to_local_account?
+     reply? && thread&.account&.local?
+   end
+@@ -291,6 +298,16 @@ class Status < ApplicationRecord
+     @emojis = CustomEmoji.from_text(fields.join(' '), account.domain)
+   end
+ 
++  def reactions(account_id = nil)
++    grouped_ordered_status_reactions.select(
++      [:name, :custom_emoji_id, 'COUNT(*) as count'].tap do |values|
++        values << StatusReaction.value_for_reaction_me_column(account_id)
++      end
++    ).to_a.tap do |records|
++      ActiveRecord::Associations::Preloader.new(records: records, associations: :custom_emoji).call
++    end
++  end
++
+   def ordered_media_attachments
+     if ordered_media_attachment_ids.nil?
+       # NOTE: sort Ruby-side to avoid hitting the database when the status is
+@@ -318,6 +335,10 @@ class Status < ApplicationRecord
+     status_stat&.quotes_count || 0
+   end
+ 
++  def reactions_count
++    status_stat&.reactions_count || 0
++  end
++
+   # Reblogs count received from an external instance
+   def untrusted_reblogs_count
+     status_stat&.untrusted_reblogs_count unless local?
+@@ -459,6 +480,14 @@ class Status < ApplicationRecord
+ 
+   private
+ 
++  def grouped_ordered_status_reactions
++    status_reactions
++      .group(:status_id, :name, :custom_emoji_id)
++      .order(
++        Arel.sql('MIN(created_at)').asc
++      )
++  end
++
+   def update_status_stat!(attrs)
+     return if marked_for_destruction? || destroyed?
+ 
+diff --git a/app/models/status_reaction.rb b/app/models/status_reaction.rb
+new file mode 100644
+index 0000000000..c4a466683e
+--- /dev/null
++++ b/app/models/status_reaction.rb
+@@ -0,0 +1,77 @@
++# frozen_string_literal: true
++
++# == Schema Information
++#
++# Table name: status_reactions
++#
++#  id              :bigint(8)        not null, primary key
++#  account_id      :bigint(8)        not null
++#  status_id       :bigint(8)        not null
++#  name            :string           default(""), not null
++#  custom_emoji_id :bigint(8)
++#  created_at      :datetime         not null
++#  updated_at      :datetime         not null
++#
++class StatusReaction < ApplicationRecord
++  include Paginable
++
++  belongs_to :account
++  belongs_to :status, inverse_of: :status_reactions
++  belongs_to :custom_emoji, optional: true
++
++  has_one :notification, as: :activity, dependent: :destroy
++
++  validates :name, presence: true
++  validates_with StatusReactionValidator
++
++  scope :not_by_excluded_account, ->(account) { where.not(account_id: account.excluded_from_timeline_account_ids) }
++
++  before_validation do
++    self.status = status.reblog if status&.reblog?
++  end
++
++  before_validation :set_custom_emoji
++
++  after_create :increment_cache_counters
++  after_destroy :decrement_cache_counters
++
++  class << self
++    def value_for_reaction_me_column(account_id)
++      if account_id.nil?
++        'FALSE AS me'
++      else
++        <<~SQL.squish
++          EXISTS(
++            SELECT 1
++            FROM status_reactions inner_reactions
++            WHERE inner_reactions.account_id = #{account_id}
++              AND inner_reactions.status_id = status_reactions.status_id
++              AND inner_reactions.name = status_reactions.name
++              AND (
++                inner_reactions.custom_emoji_id = status_reactions.custom_emoji_id
++                OR inner_reactions.custom_emoji_id IS NULL
++                  AND status_reactions.custom_emoji_id IS NULL
++              )
++          ) AS me
++        SQL
++      end
++    end
++  end
++
++  private
++
++  def increment_cache_counters
++    status&.increment_count!(:reactions_count)
++  end
++
++  def decrement_cache_counters
++    return if association(:status).loaded? && status.marked_for_destruction?
++
++    status&.decrement_count!(:reactions_count)
++  end
++
++  # Sets custom_emoji to nil when disabled
++  def set_custom_emoji
++    self.custom_emoji = CustomEmoji.find_by(disabled: false, shortcode: name, domain: custom_emoji.domain) if name.present? && custom_emoji.present?
++  end
++end
+diff --git a/app/models/status_stat.rb b/app/models/status_stat.rb
+index 24129cf311..89a0f5c029 100644
+--- a/app/models/status_stat.rb
++++ b/app/models/status_stat.rb
+@@ -7,6 +7,7 @@
+ #  id                         :bigint(8)        not null, primary key
+ #  favourites_count           :bigint(8)        default(0), not null
+ #  quotes_count               :bigint(8)        default(0), not null
++#  reactions_count            :bigint(8)        default(0), not null
+ #  reblogs_count              :bigint(8)        default(0), not null
+ #  replies_count              :bigint(8)        default(0), not null
+ #  untrusted_favourites_count :bigint(8)
+@@ -39,6 +40,10 @@ class StatusStat < ApplicationRecord
+     [attributes['quotes_count'], 0].max
+   end
+ 
++  def reactions_count
++    [attributes['reactions_count'], 0].max
++  end
++
+   private
+ 
+   def clamp_untrusted_counts
+diff --git a/app/models/user_settings.rb b/app/models/user_settings.rb
+index b164f8071f..bdbcef0df3 100644
+--- a/app/models/user_settings.rb
++++ b/app/models/user_settings.rb
+@@ -18,6 +18,7 @@ class UserSettings
+   setting :default_privacy, default: nil, in: %w(public unlisted private)
+   setting :default_content_type, default: 'text/plain'
+   setting :hide_followers_count, default: false
++  setting :visible_reactions, default: 6
+   setting :default_quote_policy, default: 'public', in: %w(public followers nobody)
+   setting :email_subscriptions, default: false
+ 
+@@ -51,6 +52,7 @@ class UserSettings
+     setting :follow, default: true
+     setting :reblog, default: false
+     setting :favourite, default: false
++    setting :reaction, default: false
+     setting :mention, default: true
+     setting :quote, default: true
+     setting :follow_request, default: true
+diff --git a/app/policies/status_policy.rb b/app/policies/status_policy.rb
+index b5b4551862..cf1528ba03 100644
+--- a/app/policies/status_policy.rb
++++ b/app/policies/status_policy.rb
+@@ -26,6 +26,10 @@ class StatusPolicy < ApplicationPolicy
+     show? && !blocking_author?
+   end
+ 
++  def react?
++    show? && !blocking_author?
++  end
++
+   def destroy?
+     owned?
+   end
+diff --git a/app/presenters/status_reaction_presenter.rb b/app/presenters/status_reaction_presenter.rb
+new file mode 100644
+index 0000000000..e629a7e4e3
+--- /dev/null
++++ b/app/presenters/status_reaction_presenter.rb
+@@ -0,0 +1,5 @@
++# frozen_string_literal: true
++
++class StatusReactionPresenter < ActiveModelSerializers::Model
++  attributes :id, :name, :custom_emoji, :count, :me
++end
+diff --git a/app/presenters/status_relationships_presenter.rb b/app/presenters/status_relationships_presenter.rb
+index 060a0a8ed6..07e79f6470 100644
+--- a/app/presenters/status_relationships_presenter.rb
++++ b/app/presenters/status_relationships_presenter.rb
+@@ -3,8 +3,8 @@
+ class StatusRelationshipsPresenter
+   PINNABLE_VISIBILITIES = %w(public unlisted private).freeze
+ 
+-  attr_reader :reblogs_map, :favourites_map, :mutes_map, :pins_map,
+-              :bookmarks_map, :filters_map, :attributes_map
++  attr_reader :reblogs_map, :favourites_map, :reactions_map, :mutes_map,
++              :pins_map, :bookmarks_map, :filters_map, :attributes_map
+ 
+   def initialize(statuses, current_account_id = nil, **options)
+     @current_account_id = current_account_id
+@@ -18,6 +18,7 @@ class StatusRelationshipsPresenter
+       @filters_map     = {}
+       @reblogs_map     = {}
+       @favourites_map  = {}
++      @reactions_map   = {}
+       @bookmarks_map   = {}
+       @mutes_map       = {}
+       @pins_map        = {}
+@@ -33,6 +34,7 @@ class StatusRelationshipsPresenter
+       @filters_map     = build_filters_map(statuses.flat_map { |s| [s, s.proper.quote&.quoted_status] }.compact.uniq, current_account_id).merge(options[:filters_map] || {})
+       @reblogs_map     = Status.reblogs_map(status_ids, current_account_id).merge(options[:reblogs_map] || {})
+       @favourites_map  = Status.favourites_map(status_ids, current_account_id).merge(options[:favourites_map] || {})
++      @reactions_map   = build_reactions_map(status_ids, current_account_id).merge(options[:reactions_map] || {})
+       @bookmarks_map   = Status.bookmarks_map(status_ids, current_account_id).merge(options[:bookmarks_map] || {})
+       @mutes_map       = Status.mutes_map(conversation_ids, current_account_id).merge(options[:mutes_map] || {})
+       @pins_map        = Status.pins_map(pinnable_status_ids, current_account_id).merge(options[:pins_map] || {})
+@@ -59,4 +61,17 @@ class StatusRelationshipsPresenter
+       end
+     end
+   end
++
++  def build_reactions_map(status_ids, current_account_id)
++    reactions = StatusReaction.select(
++      [:status_id, :name, :custom_emoji_id, 'COUNT(*) as count'].tap do |values|
++        values << StatusReaction.value_for_reaction_me_column(current_account_id)
++      end
++    ).where(status_id: status_ids).group(:status_id, :name, :custom_emoji_id).order(Arel.sql('MIN(created_at)').asc).to_a
++
++    @reactions_map = reactions.each_with_object({}) do |r, h|
++      h[r.status_id] = [] if h[r.status_id].nil?
++      h[r.status_id].push(StatusReactionPresenter.new(name: r.name, custom_emoji: r.custom_emoji, count: r.count, me: r.me))
++    end
++  end
+ end
+diff --git a/app/serializers/activitypub/emoji_reaction_serializer.rb b/app/serializers/activitypub/emoji_reaction_serializer.rb
+new file mode 100644
+index 0000000000..cfb5784af5
+--- /dev/null
++++ b/app/serializers/activitypub/emoji_reaction_serializer.rb
+@@ -0,0 +1,41 @@
++# frozen_string_literal: true
++
++class ActivityPub::EmojiReactionSerializer < ActivityPub::Serializer
++  context_extensions :emoji, :emoji_react
++
++  attributes :id, :type, :actor, :content
++  attribute :virtual_object, key: :object
++  attribute :custom_emoji, key: :tag, unless: -> { object.custom_emoji.nil? }
++
++  def id
++    [ActivityPub::TagManager.instance.uri_for(object.account), '#emoji_reactions/', object.id].join
++  end
++
++  def type
++    'EmojiReact'
++  end
++
++  def actor
++    ActivityPub::TagManager.instance.uri_for(object.account)
++  end
++
++  def virtual_object
++    ActivityPub::TagManager.instance.uri_for(object.status)
++  end
++
++  def content
++    if object.custom_emoji.nil?
++      object.name
++    else
++      ":#{object.name}:"
++    end
++  end
++
++  alias reaction content
++
++  # Akkoma (and possibly others) expect `tag` to be an array, so we can't just
++  # use the has_one shorthand because we need to wrap it into an array manually
++  def custom_emoji
++    [ActivityPub::EmojiSerializer.new(object.custom_emoji).serializable_hash]
++  end
++end
+diff --git a/app/serializers/activitypub/undo_emoji_reaction_serializer.rb b/app/serializers/activitypub/undo_emoji_reaction_serializer.rb
+new file mode 100644
+index 0000000000..49f0c1c8fd
+--- /dev/null
++++ b/app/serializers/activitypub/undo_emoji_reaction_serializer.rb
+@@ -0,0 +1,19 @@
++# frozen_string_literal: true
++
++class ActivityPub::UndoEmojiReactionSerializer < ActivityPub::Serializer
++  attributes :id, :type, :actor
++
++  has_one :object, serializer: ActivityPub::EmojiReactionSerializer
++
++  def id
++    [ActivityPub::TagManager.instance.uri_for(object.account), '#emoji_reactions/', object.id, '/undo'].join
++  end
++
++  def type
++    'Undo'
++  end
++
++  def actor
++    ActivityPub::TagManager.instance.uri_for(object.account)
++  end
++end
+diff --git a/app/serializers/initial_state_serializer.rb b/app/serializers/initial_state_serializer.rb
+index 499bcbbf56..8e758cfbf8 100644
+--- a/app/serializers/initial_state_serializer.rb
++++ b/app/serializers/initial_state_serializer.rb
+@@ -7,13 +7,17 @@ class InitialStateSerializer < ActiveModel::Serializer
+   attributes :meta, :compose, :accounts,
+              :media_attachments, :settings,
+              :max_feed_hashtags, :poll_limits,
+-             :languages, :features
++             :languages, :features, :max_reactions
+ 
+   attribute :critical_updates_pending, if: -> { object&.role&.can?(:view_devops) && SoftwareUpdate.check_enabled? }
+ 
+   has_one :push_subscription, serializer: REST::WebPushSubscriptionSerializer
+   has_one :role, serializer: REST::RoleSerializer
+ 
++  def max_reactions
++    StatusReactionValidator::LIMIT
++  end
++
+   def max_feed_hashtags
+     TagFeed::LIMIT_PER_MODE
+   end
+@@ -30,8 +34,8 @@ class InitialStateSerializer < ActiveModel::Serializer
+   def meta
+     store = default_meta_store
+ 
+-    if object.current_account
+-      store[:me]                = object.current_account.id.to_s
++    if object_account
++      store[:me]                = object_account.id.to_s
+       store[:boost_modal]       = object_account_user.setting_boost_modal
+       store[:favourite_modal]   = object_account_user.setting_favourite_modal
+       store[:quick_boosting]    = object_account_user.setting_quick_boosting
+@@ -48,6 +52,7 @@ class InitialStateSerializer < ActiveModel::Serializer
+       store[:use_pending_items] = object_account_user.setting_use_pending_items
+       store[:default_content_type] = object_account_user.setting_default_content_type
+       store[:show_trends]       = Setting.trends && object_account_user.setting_trends
++      store[:visible_reactions] = object_account_user.setting_visible_reactions
+       store[:emoji_style]       = object_account_user.settings['web.emoji_style']
+       store[:wrapstodon]        = wrapstodon
+     else
+@@ -145,14 +150,21 @@ class InitialStateSerializer < ActiveModel::Serializer
+       landing_page: Setting.landing_page,
+       trends_enabled: Setting.trends,
+       version: instance_presenter.version,
++      visible_reactions: Setting.visible_reactions,
+       terms_of_service_enabled: TermsOfService.current.present?,
+       local_live_feed_access: Setting.local_live_feed_access,
++      bubble_live_feed_access: Setting.bubble_live_feed_access,
+       remote_live_feed_access: Setting.remote_live_feed_access,
+       local_topic_feed_access: Setting.local_topic_feed_access,
++      bubble_topic_feed_access: Setting.bubble_topic_feed_access,
+       remote_topic_feed_access: Setting.remote_topic_feed_access,
+     }
+   end
+ 
++  def object_account
++    object.current_account
++  end
++
+   def object_account_user
+     object.current_account.user
+   end
+diff --git a/app/serializers/rest/instance_serializer.rb b/app/serializers/rest/instance_serializer.rb
+index 9a099a4fd4..8d655f8ede 100644
+--- a/app/serializers/rest/instance_serializer.rb
++++ b/app/serializers/rest/instance_serializer.rb
+@@ -110,17 +110,24 @@ class REST::InstanceSerializer < ActiveModel::Serializer
+         enabled: TranslationService.configured?,
+       },
+ 
++      reactions: {
++        max_reactions: StatusReactionValidator::LIMIT,
++      },
++
+       timelines_access: {
+         live_feeds: {
+           local: Setting.local_live_feed_access,
++          bubble: Setting.bubble_live_feed_access,
+           remote: Setting.remote_live_feed_access,
+         },
+         hashtag_feeds: {
+           local: Setting.local_topic_feed_access,
++          bubble: Setting.bubble_topic_feed_access,
+           remote: Setting.remote_topic_feed_access,
+         },
+         trending_link_feeds: {
+           local: Setting.local_topic_feed_access,
++          bubble: Setting.bubble_topic_feed_access,
+           remote: Setting.remote_topic_feed_access,
+         },
+       },
+diff --git a/app/serializers/rest/notification_group_serializer.rb b/app/serializers/rest/notification_group_serializer.rb
+index b47ff41cec..cf725f77f6 100644
+--- a/app/serializers/rest/notification_group_serializer.rb
++++ b/app/serializers/rest/notification_group_serializer.rb
+@@ -21,6 +21,7 @@ class REST::NotificationGroupSerializer < ActiveModel::Serializer
+   belongs_to :account_warning, key: :moderation_warning, if: :moderation_warning_event?, serializer: REST::AccountWarningSerializer
+   belongs_to :generated_annual_report, key: :annual_report, if: :annual_report_event?, serializer: REST::AnnualReportEventSerializer
+   belongs_to :target_collection, key: :collection, if: :collection_type?, serializer: REST::CollectionSerializer
++  belongs_to :status_reaction, key: :reaction, if: :single_reaction?, serializer: REST::StatusReactionSerializer
+ 
+   def sample_account_ids
+     object.sample_accounts.pluck(:id).map(&:to_s)
+@@ -31,7 +32,7 @@ class REST::NotificationGroupSerializer < ActiveModel::Serializer
+   end
+ 
+   def status_type?
+-    [:favourite, :reblog, :status, :mention, :poll, :update, :quote, :quoted_update].include?(object.type)
++    [:favourite, :reaction, :reblog, :status, :mention, :poll, :update, :quote, :quoted_update].include?(object.type)
+   end
+ 
+   def collection_type?
+@@ -42,6 +43,10 @@ class REST::NotificationGroupSerializer < ActiveModel::Serializer
+     object.type == :'admin.report'
+   end
+ 
++  def single_reaction?
++    object.type == :reaction && object.notifications_count == 1
++  end
++
+   def relationship_severance_event?
+     object.type == :severed_relationships
+   end
+diff --git a/app/serializers/rest/notification_serializer.rb b/app/serializers/rest/notification_serializer.rb
+index 0fb809fcb0..d2c49614d3 100644
+--- a/app/serializers/rest/notification_serializer.rb
++++ b/app/serializers/rest/notification_serializer.rb
+@@ -18,6 +18,7 @@ class REST::NotificationSerializer < ActiveModel::Serializer
+   belongs_to :account_relationship_severance_event, key: :event, if: :relationship_severance_event?, serializer: REST::AccountRelationshipSeveranceEventSerializer
+   belongs_to :account_warning, key: :moderation_warning, if: :moderation_warning_event?, serializer: REST::AccountWarningSerializer
+   belongs_to :target_collection, key: :collection, if: :collection_type?, serializer: REST::CollectionSerializer
++  belongs_to :status_reaction, key: :reaction, if: :reaction_type?, serializer: REST::StatusReactionSerializer
+ 
+   def id
+     object.id.to_s
+@@ -28,7 +29,7 @@ class REST::NotificationSerializer < ActiveModel::Serializer
+   end
+ 
+   def status_type?
+-    [:favourite, :reblog, :status, :mention, :poll, :update, :quoted_update, :quote].include?(object.type)
++    [:favourite, :reaction, :reblog, :status, :mention, :poll, :update, :quoted_update, :quote].include?(object.type)
+   end
+ 
+   def collection_type?
+@@ -39,6 +40,10 @@ class REST::NotificationSerializer < ActiveModel::Serializer
+     object.type == :'admin.report'
+   end
+ 
++  def reaction_type?
++    object.type == :reaction
++  end
++
+   def relationship_severance_event?
+     object.type == :severed_relationships
+   end
+diff --git a/app/serializers/rest/status_reaction_serializer.rb b/app/serializers/rest/status_reaction_serializer.rb
+new file mode 100644
+index 0000000000..1efc051088
+--- /dev/null
++++ b/app/serializers/rest/status_reaction_serializer.rb
+@@ -0,0 +1,59 @@
++# frozen_string_literal: true
++
++class REST::StatusReactionSerializer < ActiveModel::Serializer
++  include RoutingHelper
++
++  attributes :name
++
++  attribute :id, if: :exclude_count?
++  attribute :me, if: :include_me?
++  attribute :url, if: :custom_emoji?
++  attribute :static_url, if: :custom_emoji?
++  attribute :count, unless: :exclude_count?
++
++  belongs_to :account, serializer: REST::AccountSerializer, if: :include_account?
++
++  delegate :count, to: :object
++
++  def include_me?
++    !exclude_count? && current_user?
++  end
++
++  def include_account?
++    instance_options[:include_account]
++  end
++
++  def exclude_count?
++    instance_options[:exclude_count] || !object.respond_to?(:count)
++  end
++
++  def current_user?
++    !current_user.nil?
++  end
++
++  def custom_emoji?
++    object.custom_emoji.present?
++  end
++
++  def name
++    if extern?
++      [object.name, '@', object.custom_emoji.domain].join
++    else
++      object.name
++    end
++  end
++
++  def url
++    full_asset_url(object.custom_emoji.image.url)
++  end
++
++  def static_url
++    full_asset_url(object.custom_emoji.image.url(:static))
++  end
++
++  private
++
++  def extern?
++    custom_emoji? && object.custom_emoji.domain.present?
++  end
++end
+diff --git a/app/serializers/rest/status_serializer.rb b/app/serializers/rest/status_serializer.rb
+index 7a27a7fa75..defb967ba2 100644
+--- a/app/serializers/rest/status_serializer.rb
++++ b/app/serializers/rest/status_serializer.rb
+@@ -8,7 +8,7 @@ class REST::StatusSerializer < ActiveModel::Serializer
+   attributes :id, :created_at, :in_reply_to_id, :in_reply_to_account_id,
+              :sensitive, :spoiler_text, :visibility, :language,
+              :uri, :url, :replies_count, :reblogs_count,
+-             :favourites_count, :quotes_count, :edited_at
++             :favourites_count, :reactions_count, :quotes_count, :edited_at
+ 
+   attribute :favourited, if: :current_user?
+   attribute :reblogged, if: :current_user?
+@@ -30,6 +30,7 @@ class REST::StatusSerializer < ActiveModel::Serializer
+   has_many :ordered_mentions, key: :mentions
+   has_many :tags
+   has_many :emojis, serializer: REST::CustomEmojiSerializer
++  has_many :reactions, serializer: REST::StatusReactionSerializer
+   has_many :tagged_collections, serializer: REST::CollectionSerializer
+ 
+   # Due to a ActiveModel::Serializer quirk, if you change any of the following, have a look at
+@@ -108,6 +109,10 @@ class REST::StatusSerializer < ActiveModel::Serializer
+     relationships&.attributes_map&.dig(object.id, :quotes_count) || object.quotes_count
+   end
+ 
++  def reactions_count
++    relationships&.attributes_map&.dig(object.id, :reactions_count) || object.reactions_count
++  end
++
+   def favourited
+     if relationships
+       relationships.favourites_map[object.id] || false
+@@ -171,6 +176,14 @@ class REST::StatusSerializer < ActiveModel::Serializer
+     object.active_mentions.to_a.sort_by(&:id)
+   end
+ 
++  def reactions
++    if relationships && current_user?
++      relationships.reactions_map[object.id] || []
++    else
++      object.reactions(current_user&.account&.id)
++    end
++  end
++
+   def tagged_collections
+     object.tagged_objects.filter_map { |tagged_object| tagged_object.object if tagged_object.ap_type == 'FeaturedCollection' }
+   end
+diff --git a/app/serializers/rest/v1/instance_serializer.rb b/app/serializers/rest/v1/instance_serializer.rb
+index 420f1926cf..a1630e783c 100644
+--- a/app/serializers/rest/v1/instance_serializer.rb
++++ b/app/serializers/rest/v1/instance_serializer.rb
+@@ -84,11 +84,16 @@ class REST::V1::InstanceSerializer < ActiveModel::Serializer
+       },
+ 
+       polls: {
++        allow_media: true,
+         max_options: PollOptionsValidator::MAX_OPTIONS,
+         max_characters_per_option: PollOptionsValidator::MAX_OPTION_CHARS,
+         min_expiration: PollExpirationValidator::MIN_EXPIRATION,
+         max_expiration: PollExpirationValidator::MAX_EXPIRATION,
+       },
++
++      reactions: {
++        max_reactions: StatusReactionValidator::LIMIT,
++      },
+     }
+   end
+ 
+diff --git a/app/services/delete_account_service.rb b/app/services/delete_account_service.rb
+index 0d534e8644..270682d72f 100644
+--- a/app/services/delete_account_service.rb
++++ b/app/services/delete_account_service.rb
+@@ -155,6 +155,7 @@ class DeleteAccountService < BaseService
+     purge_polls!
+     purge_generated_notifications!
+     purge_favourites!
++    purge_status_reactions!
+     purge_bookmarks!
+     purge_feeds!
+     purge_other_associations!
+@@ -207,6 +208,16 @@ class DeleteAccountService < BaseService
+     end
+   end
+ 
++  def purge_status_reactions!
++    @account.status_reactions.in_batches do |status_reactions|
++      ids = status_reactions.pluck(:status_id)
++      StatusStat.where(status_id: ids).update_all('reactions_count = GREATEST(0, reactions_count - 1)')
++      Chewy.strategy.current.update(StatusesIndex, ids) if Chewy.enabled?
++      Rails.cache.delete_multi(ids.map { |id| "statuses/#{id}" })
++      status_reactions.delete_all
++    end
++  end
++
+   def purge_bookmarks!
+     @account.bookmarks.in_batches do |bookmarks|
+       Chewy.strategy.current.update(StatusesIndex, bookmarks.pluck(:status_id)) if Chewy.enabled?
+diff --git a/app/services/react_service.rb b/app/services/react_service.rb
+new file mode 100644
+index 0000000000..e48e0f6803
+--- /dev/null
++++ b/app/services/react_service.rb
+@@ -0,0 +1,46 @@
++# frozen_string_literal: true
++
++class ReactService < BaseService
++  include Authorization
++  include Payloadable
++
++  def call(account, status, emoji)
++    authorize_with account, status, :react?
++
++    name, domain = emoji.split('@')
++    return unless domain.nil? || status.local?
++
++    custom_emoji = CustomEmoji.find_by(shortcode: name, domain: domain)
++    reaction = StatusReaction.find_by(account: account, status: status, name: name, custom_emoji: custom_emoji)
++    return reaction unless reaction.nil?
++
++    reaction = StatusReaction.create!(account: account, status: status, name: name, custom_emoji: custom_emoji)
++
++    Trends.statuses.register(status)
++
++    create_notification(reaction)
++    increment_statistics
++
++    reaction
++  end
++
++  private
++
++  def create_notification(reaction)
++    status = reaction.status
++
++    if status.account.local?
++      LocalNotificationWorker.perform_async(status.account_id, reaction.id, 'StatusReaction', 'reaction')
++    elsif status.account.activitypub?
++      ActivityPub::DeliveryWorker.perform_async(build_json(reaction), reaction.account_id, status.account.inbox_url)
++    end
++  end
++
++  def increment_statistics
++    ActivityTracker.increment('activity:interactions')
++  end
++
++  def build_json(reaction)
++    JSON.generate(serialize_payload(reaction, ActivityPub::EmojiReactionSerializer))
++  end
++end
+diff --git a/app/services/unreact_service.rb b/app/services/unreact_service.rb
+new file mode 100644
+index 0000000000..da9e287020
+--- /dev/null
++++ b/app/services/unreact_service.rb
+@@ -0,0 +1,27 @@
++# frozen_string_literal: true
++
++class UnreactService < BaseService
++  include Payloadable
++
++  def call(account, status, emoji)
++    name, domain = emoji.split('@')
++    custom_emoji = CustomEmoji.find_by(shortcode: name, domain: domain)
++    reaction = StatusReaction.find_by(account: account, status: status, name: name, custom_emoji: custom_emoji)
++    return if reaction.nil?
++
++    reaction.destroy!
++    create_notification(reaction) if !status.account.local? && status.account.activitypub?
++    reaction
++  end
++
++  private
++
++  def create_notification(reaction)
++    status = reaction.status
++    ActivityPub::DeliveryWorker.perform_async(build_json(reaction), reaction.account_id, status.account.inbox_url)
++  end
++
++  def build_json(reaction)
++    serialize_payload(reaction, ActivityPub::UndoEmojiReactionSerializer).to_json
++  end
++end
+diff --git a/app/validators/status_reaction_validator.rb b/app/validators/status_reaction_validator.rb
+new file mode 100644
+index 0000000000..9699c7e04d
+--- /dev/null
++++ b/app/validators/status_reaction_validator.rb
+@@ -0,0 +1,28 @@
++# frozen_string_literal: true
++
++class StatusReactionValidator < ActiveModel::Validator
++  SUPPORTED_EMOJIS = JSON.load_file(Rails.root.join('app', 'javascript', 'mastodon', 'features', 'emoji', 'emoji_map.json').to_s).keys.freeze
++
++  LIMIT = [1, (ENV['MAX_REACTIONS'] || 1).to_i].max
++
++  def validate(reaction)
++    return if reaction.name.blank?
++
++    reaction.errors.add(:name, I18n.t('reactions.errors.unrecognized_emoji')) if reaction.custom_emoji_id.blank? && !unicode_emoji?(reaction.name)
++    reaction.errors.add(:base, I18n.t('reactions.errors.limit_reached')) if reaction.account.local? && new_reaction?(reaction) && limit_reached?(reaction)
++  end
++
++  private
++
++  def unicode_emoji?(name)
++    SUPPORTED_EMOJIS.include?(name)
++  end
++
++  def new_reaction?(reaction)
++    !reaction.status.status_reactions.exists?(status: reaction.status, account: reaction.account, name: reaction.name, custom_emoji: reaction.custom_emoji)
++  end
++
++  def limit_reached?(reaction)
++    reaction.status.status_reactions.where(status: reaction.status, account: reaction.account).count >= LIMIT
++  end
++end
+diff --git a/app/views/notification_mailer/reaction.html.haml b/app/views/notification_mailer/reaction.html.haml
+new file mode 100644
+index 0000000000..0bca350f1d
+--- /dev/null
++++ b/app/views/notification_mailer/reaction.html.haml
+@@ -0,0 +1,16 @@
++= content_for :heading do
++  = render 'application/mailer/heading',
++           image_url: frontend_asset_url('images/mailer-new/heading/reaction.png'),
++           subtitle: t('notification_mailer.reaction.body', name: @status.account.pretty_acct),
++           title: t('notification_mailer.reaction.title')
++%table.email-w-full{ cellspacing: 0, cellpadding: 0, border: 0, role: 'presentation' }
++  %tr
++    %td.email-body-padding-td
++      %table.email-inner-card-table{ cellspacing: 0, cellpadding: 0, border: 0, role: 'presentation' }
++        %tr
++          %td.email-inner-card-td
++            = render 'status', status: @status, time_zone: @me.user_time_zone
++            %table.email-w-full{ cellspacing: 0, cellpadding: 0, border: 0, role: 'presentation' }
++              %tr
++                %td.email-padding-top-24
++                  = render 'application/mailer/button', text: t('application_mailer.view_status'), url: web_url("@#{@status.account.pretty_acct}/#{@status.id}")
+diff --git a/app/views/notification_mailer/reaction.text.erb b/app/views/notification_mailer/reaction.text.erb
+new file mode 100644
+index 0000000000..fa30d708ea
+--- /dev/null
++++ b/app/views/notification_mailer/reaction.text.erb
+@@ -0,0 +1,5 @@
++<%= raw t('application_mailer.salutation', name: display_name(@me)) %>
++
++<%= raw t('notification_mailer.reaction.body', name: @account.pretty_acct) %>
++
++<%= render 'status', status: @status %>
+diff --git a/app/views/settings/preferences/appearance/show.html.haml b/app/views/settings/preferences/appearance/show.html.haml
+index e38886cda9..6fc1e10ed8 100644
+--- a/app/views/settings/preferences/appearance/show.html.haml
++++ b/app/views/settings/preferences/appearance/show.html.haml
+@@ -76,6 +76,9 @@
+       = ff.input :'web.use_system_font', wrapper: :with_label, label: I18n.t('simple_form.labels.defaults.setting_system_font_ui')
+       = ff.input :'web.use_system_scrollbars', wrapper: :with_label, label: I18n.t('simple_form.labels.defaults.setting_system_scrollbars_ui')
+ 
++    .fields-group.fields-row__column.fields-row__column-6
++      = ff.input :visible_reactions, wrapper: :with_label, label: I18n.t('simple_form.labels.defaults.setting_visible_reactions'), input_html: { type: 'number', min: '0', data: { default: '6' } }, hint: false
++
+     %h2= t 'appearance.discovery'
+ 
+     .fields-group
+diff --git a/app/views/settings/preferences/notifications/show.html.haml b/app/views/settings/preferences/notifications/show.html.haml
+index a23f2d0099..601ec23454 100644
+--- a/app/views/settings/preferences/notifications/show.html.haml
++++ b/app/views/settings/preferences/notifications/show.html.haml
+@@ -17,6 +17,7 @@
+       = ff.input :'notification_emails.follow_request', wrapper: :with_label, label: I18n.t('simple_form.labels.notification_emails.follow_request')
+       = ff.input :'notification_emails.reblog', wrapper: :with_label, label: I18n.t('simple_form.labels.notification_emails.reblog')
+       = ff.input :'notification_emails.favourite', wrapper: :with_label, label: I18n.t('simple_form.labels.notification_emails.favourite')
++      = ff.input :'notification_emails.reaction', wrapper: :with_label, label: I18n.t('simple_form.labels.notification_emails.reaction')
+       = ff.input :'notification_emails.mention', wrapper: :with_label, label: I18n.t('simple_form.labels.notification_emails.mention')
+       = ff.input :'notification_emails.quote', wrapper: :with_label, label: I18n.t('simple_form.labels.notification_emails.quote')
+ 
+diff --git a/app/workers/unreact_worker.rb b/app/workers/unreact_worker.rb
+new file mode 100644
+index 0000000000..15f1f4dd77
+--- /dev/null
++++ b/app/workers/unreact_worker.rb
+@@ -0,0 +1,11 @@
++# frozen_string_literal: true
++
++class UnreactWorker
++  include Sidekiq::Worker
++
++  def perform(account_id, status_id, emoji)
++    UnreactService.new.call(Account.find(account_id), Status.find(status_id), emoji)
++  rescue ActiveRecord::RecordNotFound
++    true
++  end
++end
+diff --git a/config/locales-glitch/en.yml b/config/locales-glitch/en.yml
+index 1485ee174d..e89374d87e 100644
+--- a/config/locales-glitch/en.yml
++++ b/config/locales-glitch/en.yml
+@@ -5,6 +5,10 @@ en:
+       batch_copy_error: 'An error occurred when copying some of the selected emoji: %{message}'
+       batch_error: 'An error occurred: %{message}'
+     settings:
++      bubble_domains:
++        all: To everyone
++        disabled: To no one
++        users: To logged-in local users
+       captcha_enabled:
+         desc_html: This relies on external scripts from hCaptcha, which may be a security and privacy concern. In addition, <strong>this can make the registration process significantly less accessible to some (especially disabled) people</strong>. For these reasons, please consider alternative measures such as approval-based or invite-based registration.
+         title: Require new users to solve a CAPTCHA to confirm their account
+@@ -38,5 +42,10 @@ en:
+       title: User verification
+   generic:
+     use_this: Use this
++  notification_mailer:
++    reaction:
++      body: "%{name} reacted to your post:"
++      subject: "%{name} reacted to your post"
++      title: New reaction
+   settings:
+     flavours: Flavours
+diff --git a/config/locales-glitch/simple_form.en.yml b/config/locales-glitch/simple_form.en.yml
+index 9e943133bd..c1bbd03f15 100644
+--- a/config/locales-glitch/simple_form.en.yml
++++ b/config/locales-glitch/simple_form.en.yml
+@@ -20,7 +20,12 @@ en:
+         setting_show_followers_count: Show your followers count
+         setting_skin: Skin
+         setting_system_emoji_font: Use system's default font for emojis (applies to Glitch flavour only)
++        setting_visible_reactions: Number of visible emoji reactions
++      form_admin_settings:
++        bubble_live_feed_access: Access to live feeds featuring bubble posts
++        bubble_topic_feed_access: Access to hashtag and link feeds featuring bubble posts
+       notification_emails:
++        reaction: Someone reacted to your post
+         trending_link: New trending link requires review
+         trending_status: New trending post requires review
+         trending_tag: New trending tag requires review
+diff --git a/config/routes/api.rb b/config/routes/api.rb
+index 8bfc0e77a6..1df408af21 100644
+--- a/config/routes/api.rb
++++ b/config/routes/api.rb
+@@ -31,6 +31,7 @@ namespace :api, format: false do
+       scope module: :statuses do
+         resources :reblogged_by, controller: :reblogged_by_accounts, only: :index
+         resources :favourited_by, controller: :favourited_by_accounts, only: :index
++        resources :reactions, controller: :reactions, only: :index
+         resource :reblog, only: :create
+         resource :context, only: :show
+         post :unreblog, to: 'reblogs#destroy'
+@@ -44,6 +45,11 @@ namespace :api, format: false do
+         resource :favourite, only: :create
+         post :unfavourite, to: 'favourites#destroy'
+ 
++        # foreign custom emojis are encoded as shortcode@domain.tld
++        # the constraint prevents rails from interpreting the ".tld" as a filename extension
++        post '/react/:id', to: 'reactions#create', constraints: { id: %r{[^/]+} }
++        post '/unreact/:id', to: 'reactions#destroy', constraints: { id: %r{[^/]+} }
++
+         resource :bookmark, only: :create
+         post :unbookmark, to: 'bookmarks#destroy'
+ 
+@@ -147,6 +153,7 @@ namespace :api, format: false do
+         resources :peers, only: [:index]
+         resources :rules, only: [:index]
+         resources :domain_blocks, only: [:index]
++        resources :bubble_domains, only: [:index]
+         resources :terms_of_service, only: [:index, :show], param: :date
+ 
+         resource :privacy_policy, only: [:show]
+diff --git a/db/migrate/20221124114030_create_status_reactions.rb b/db/migrate/20221124114030_create_status_reactions.rb
+new file mode 100644
+index 0000000000..7e6e87e7bb
+--- /dev/null
++++ b/db/migrate/20221124114030_create_status_reactions.rb
+@@ -0,0 +1,16 @@
++# frozen_string_literal: true
++
++class CreateStatusReactions < ActiveRecord::Migration[6.1]
++  def change
++    create_table :status_reactions do |t|
++      t.references :account, null: false, foreign_key: { on_delete: :cascade }
++      t.references :status, null: false, foreign_key: { on_delete: :cascade }
++      t.string :name, null: false, default: ''
++      t.references :custom_emoji, null: true, foreign_key: { on_delete: :cascade }
++
++      t.timestamps
++    end
++
++    add_index :status_reactions, [:account_id, :status_id, :name], unique: true, name: :index_status_reactions_on_account_id_and_status_id
++  end
++end
+diff --git a/db/migrate/20240411044156_add_reaction_count_to_status_stat.rb b/db/migrate/20240411044156_add_reaction_count_to_status_stat.rb
+new file mode 100644
+index 0000000000..cec52ff6cd
+--- /dev/null
++++ b/db/migrate/20240411044156_add_reaction_count_to_status_stat.rb
+@@ -0,0 +1,7 @@
++# frozen_string_literal: true
++
++class AddReactionCountToStatusStat < ActiveRecord::Migration[7.1]
++  def change
++    add_column :status_stats, :reactions_count, :bigint, default: 0, null: false
++  end
++end
+diff --git a/db/post_migrate/20250305023754_add_reaction_counts_to_status_stat.rb b/db/post_migrate/20250305023754_add_reaction_counts_to_status_stat.rb
+new file mode 100644
+index 0000000000..1c4e717511
+--- /dev/null
++++ b/db/post_migrate/20250305023754_add_reaction_counts_to_status_stat.rb
+@@ -0,0 +1,21 @@
++# frozen_string_literal: true
++
++class AddReactionCountsToStatusStat < ActiveRecord::Migration[8.0]
++  disable_ddl_transaction!
++
++  def up
++    Status.unscoped.includes(:status_stat).find_each do |status|
++      status.status_stat.tap do |status_stat|
++        reaction_count = status.status_reactions.count
++        if reaction_count.positive?
++          status_stat.reactions_count = reaction_count
++          status_stat.save
++        end
++      end
++    end
++  end
++
++  def down
++    StatusStat.unscoped.in_batches.update_all(reactions_count: 0)
++  end
++end
+diff --git a/db/post_migrate/20260520184138_normalize_status_reaction_variation_selectors.rb b/db/post_migrate/20260520184138_normalize_status_reaction_variation_selectors.rb
+new file mode 100644
+index 0000000000..41bbdd75f6
+--- /dev/null
++++ b/db/post_migrate/20260520184138_normalize_status_reaction_variation_selectors.rb
+@@ -0,0 +1,13 @@
++# frozen_string_literal: true
++
++class NormalizeStatusReactionVariationSelectors < ActiveRecord::Migration[8.1]
++  # Dummy classes, to make migration possible across version changes
++  class StatusReaction < ApplicationRecord; end
++
++  def up
++    StatusReaction.where(custom_emoji_id: nil).find_each do |react|
++      react.name = Emoji.normalize(react.name)
++      react.save!
++    end
++  end
++end
+diff --git a/lib/mastodon/cli/cache.rb b/lib/mastodon/cli/cache.rb
+index 9f66cd4937..83230c11da 100644
+--- a/lib/mastodon/cli/cache.rb
++++ b/lib/mastodon/cli/cache.rb
+@@ -64,6 +64,7 @@ module Mastodon::CLI
+         status_stat.reblogs_count    = status.reblogs.count
+         status_stat.favourites_count = status.favourites.count
+         status_stat.quotes_count     = status.quotes.accepted.count
++        status_stat.reactions_count  = status.status_reactions.count
+ 
+         status_stat.save if status_stat.changed?
+       end
+diff --git a/spec/fabricators/status_reaction_fabricator.rb b/spec/fabricators/status_reaction_fabricator.rb
+new file mode 100644
+index 0000000000..6c5e67e8a4
+--- /dev/null
++++ b/spec/fabricators/status_reaction_fabricator.rb
+@@ -0,0 +1,8 @@
++# frozen_string_literal: true
++
++Fabricator(:status_reaction) do
++  account
++  status
++  name '👍'
++  custom_emoji
++end
+diff --git a/spec/lib/activitypub/activity/emoji_react_spec.rb b/spec/lib/activitypub/activity/emoji_react_spec.rb
+new file mode 100644
+index 0000000000..e703f190eb
+--- /dev/null
++++ b/spec/lib/activitypub/activity/emoji_react_spec.rb
+@@ -0,0 +1,107 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++
++RSpec.describe ActivityPub::Activity::EmojiReact do
++  let(:sender)    { Fabricate(:account) }
++  let(:recipient) { Fabricate(:account) }
++  let(:status)    { Fabricate(:status, account: recipient) }
++
++  describe '#perform' do
++    subject { described_class.new(json, sender) }
++
++    context 'with unicode emoji' do
++      let(:json) do
++        {
++          '@context': [
++            'https://www.w3.org/ns/activitystreams',
++            {
++              litepub: 'http://litepub.social/ns#',
++              EmojiReact: 'litepub:EmojiReact',
++            },
++          ],
++          id: 'foo',
++          type: 'EmojiReact',
++          content: content,
++          actor: ActivityPub::TagManager.instance.uri_for(sender),
++          object: ActivityPub::TagManager.instance.uri_for(status),
++        }.with_indifferent_access
++      end
++
++      before do
++        subject.perform
++      end
++
++      context 'without presentation' do
++        let(:content) { '❤' }
++
++        it 'creates a reaction from sender to status' do
++          expect(sender.reacted?(status, '❤️')).to be true
++        end
++      end
++
++      context 'with explicit presentation' do
++        let(:content) { '❤️' }
++
++        it 'creates a reaction from sender to status' do
++          expect(sender.reacted?(status, '❤️')).to be true
++        end
++      end
++
++      context 'with implicit presentation' do
++        let(:content) { '😂' }
++
++        it 'creates a reaction from sender to status' do
++          expect(sender.reacted?(status, '😂')).to be true
++        end
++      end
++    end
++
++    context 'with custom emoji' do
++      let(:json) do
++        {
++          '@context': [
++            'https://www.w3.org/ns/activitystreams',
++            {
++              toot: 'http://joinmastodon.org/ns#',
++              Emoji: 'toot:Emoji',
++              litepub: 'http://litepub.social/ns#',
++              EmojiReact: 'litepub:EmojiReact',
++            },
++          ],
++          id: 'foo',
++          type: 'EmojiReact',
++          content: ':coolcat:',
++          tag: [
++            {
++              type: 'Emoji',
++              icon: {
++                url: 'http://example.com/emoji.png',
++              },
++              name: 'coolcat',
++            },
++          ],
++          actor: ActivityPub::TagManager.instance.uri_for(sender),
++          object: ActivityPub::TagManager.instance.uri_for(status),
++        }.with_indifferent_access
++      end
++
++      before do
++        stub_request(:get, 'http://example.com/emoji.png').to_return(body: attachment_fixture('emojo.png'))
++
++        subject.perform
++      end
++
++      it 'creates a reaction from sender to status' do
++        emoji = CustomEmoji.find_by(shortcode: 'coolcat', domain: sender.domain)
++        expect(emoji)
++          .to be_present
++          .and have_attributes(
++            shortcode: eq('coolcat'),
++            domain: eq(sender.domain)
++          )
++        expect(sender.reacted?(status, 'coolcat', emoji)).to be true
++      end
++    end
++  end
++end
+diff --git a/spec/lib/activitypub/activity/like_spec.rb b/spec/lib/activitypub/activity/like_spec.rb
+index 640d61ab36..e57daf4497 100644
+--- a/spec/lib/activitypub/activity/like_spec.rb
++++ b/spec/lib/activitypub/activity/like_spec.rb
+@@ -7,25 +7,111 @@ RSpec.describe ActivityPub::Activity::Like do
+   let(:recipient) { Fabricate(:account) }
+   let(:status)    { Fabricate(:status, account: recipient) }
+ 
+-  let(:json) do
+-    {
+-      '@context': 'https://www.w3.org/ns/activitystreams',
+-      id: 'foo',
+-      type: 'Like',
+-      actor: ActivityPub::TagManager.instance.uri_for(sender),
+-      object: ActivityPub::TagManager.instance.uri_for(status),
+-    }.with_indifferent_access
+-  end
+-
+   describe '#perform' do
+-    subject { described_class.new(json, sender) }
++    context 'with no content' do
++      subject { described_class.new(json, sender) }
++
++      let(:json) do
++        {
++          '@context': 'https://www.w3.org/ns/activitystreams',
++          id: 'foo',
++          type: 'Like',
++          actor: ActivityPub::TagManager.instance.uri_for(sender),
++          object: ActivityPub::TagManager.instance.uri_for(status),
++        }.with_indifferent_access
++      end
++
++      before do
++        subject.perform
++      end
+ 
+-    before do
+-      subject.perform
++      it 'creates a favourite from sender to status' do
++        expect(sender.favourited?(status)).to be true
++      end
+     end
+ 
+-    it 'creates a favourite from sender to status' do
+-      expect(sender.favourited?(status)).to be true
++    context 'with content' do
++      subject { described_class.new(json, sender) }
++
++      context 'with unicode emoji' do
++        let(:json) do
++          {
++            '@context': 'https://www.w3.org/ns/activitystreams',
++            id: 'foo',
++            type: 'Like',
++            content: content,
++            actor: ActivityPub::TagManager.instance.uri_for(sender),
++            object: ActivityPub::TagManager.instance.uri_for(status),
++          }.with_indifferent_access
++        end
++
++        before do
++          subject.perform
++        end
++
++        context 'without presentation' do
++          let(:content) { '❤' }
++
++          it 'creates a reaction from sender to status' do
++            expect(sender.reacted?(status, '❤️')).to be true
++          end
++        end
++
++        context 'with explicit presentation' do
++          let(:content) { '❤️' }
++
++          it 'creates a reaction from sender to status' do
++            expect(sender.reacted?(status, '❤️')).to be true
++          end
++        end
++
++        context 'with implicit presentation' do
++          let(:content) { '😂' }
++
++          it 'creates a reaction from sender to status' do
++            expect(sender.reacted?(status, '😂')).to be true
++          end
++        end
++      end
++
++      context 'with custom emoji' do
++        let(:json) do
++          {
++            '@context': 'https://www.w3.org/ns/activitystreams',
++            id: 'foo',
++            type: 'Like',
++            content: ':coolcat:',
++            tag: [
++              {
++                type: 'Emoji',
++                icon: {
++                  url: 'http://example.com/emoji.png',
++                },
++                name: 'coolcat',
++              },
++            ],
++            actor: ActivityPub::TagManager.instance.uri_for(sender),
++            object: ActivityPub::TagManager.instance.uri_for(status),
++          }.with_indifferent_access
++        end
++
++        before do
++          stub_request(:get, 'http://example.com/emoji.png').to_return(body: attachment_fixture('emojo.png'))
++
++          subject.perform
++        end
++
++        it 'creates a reaction from sender to status' do
++          emoji = CustomEmoji.find_by(shortcode: 'coolcat', domain: sender.domain)
++          expect(emoji)
++            .to be_present
++            .and have_attributes(
++              shortcode: eq('coolcat'),
++              domain: eq(sender.domain)
++            )
++          expect(sender.reacted?(status, 'coolcat', emoji)).to be true
++        end
++      end
+     end
+   end
+ end
+diff --git a/spec/lib/activitypub/activity/undo_spec.rb b/spec/lib/activitypub/activity/undo_spec.rb
+index 58e71fc4e8..82dbcfb23c 100644
+--- a/spec/lib/activitypub/activity/undo_spec.rb
++++ b/spec/lib/activitypub/activity/undo_spec.rb
+@@ -9,7 +9,15 @@ RSpec.describe ActivityPub::Activity::Undo do
+ 
+   let(:json) do
+     {
+-      '@context': 'https://www.w3.org/ns/activitystreams',
++      '@context': [
++        'https://www.w3.org/ns/activitystreams',
++        {
++          toot: 'http://joinmastodon.org/ns#',
++          Emoji: 'toot:Emoji',
++          litepub: 'http://litepub.social/ns#',
++          EmojiReact: 'litepub:EmojiReact',
++        },
++      ],
+       id: 'foo',
+       type: 'Undo',
+       actor: ActivityPub::TagManager.instance.uri_for(sender),
+@@ -158,22 +166,103 @@ RSpec.describe ActivityPub::Activity::Undo do
+     context 'with Like' do
+       let(:status) { Fabricate(:status) }
+ 
+-      let(:object_json) do
+-        {
+-          id: 'bar',
+-          type: 'Like',
+-          actor: ActivityPub::TagManager.instance.uri_for(sender),
+-          object: ActivityPub::TagManager.instance.uri_for(status),
+-        }
++      context 'without content' do
++        let(:object_json) do
++          {
++            id: 'bar',
++            type: 'Like',
++            actor: ActivityPub::TagManager.instance.uri_for(sender),
++            object: ActivityPub::TagManager.instance.uri_for(status),
++          }
++        end
++
++        before do
++          Fabricate(:favourite, account: sender, status: status)
++        end
++
++        it 'deletes favourite from sender to status' do
++          subject.perform
++          expect(sender.favourited?(status)).to be false
++        end
+       end
+ 
+-      before do
+-        Fabricate(:favourite, account: sender, status: status)
++      context 'with content' do
++        let(:object_json) do
++          {
++            id: 'bar',
++            type: 'Like',
++            content: '😂',
++            actor: ActivityPub::TagManager.instance.uri_for(sender),
++            object: ActivityPub::TagManager.instance.uri_for(status),
++          }
++        end
++
++        before do
++          Fabricate(:status_reaction, account: sender, status: status, name: '😂')
++        end
++
++        it 'deletes reaction from sender to status' do
++          subject.perform
++          expect(sender.reacted?(status, '😂')).to be false
++        end
+       end
++    end
+ 
+-      it 'deletes favourite from sender to status' do
+-        subject.perform
+-        expect(sender.favourited?(status)).to be false
++    context 'with EmojiReact' do
++      let(:status) { Fabricate(:status) }
++
++      context 'with unicode emoji' do
++        let(:object_json) do
++          {
++            id: 'bar',
++            type: 'EmojiReact',
++            content: '😂',
++            actor: ActivityPub::TagManager.instance.uri_for(sender),
++            object: ActivityPub::TagManager.instance.uri_for(status),
++          }
++        end
++
++        before do
++          Fabricate(:status_reaction, account: sender, status: status, name: '😂')
++        end
++
++        it 'deletes reaction from sender to status' do
++          subject.perform
++          expect(sender.reacted?(status, '😂')).to be false
++        end
++      end
++
++      context 'with custom emoji' do
++        let(:emoji) { Fabricate(:custom_emoji, shortcode: 'coolcat', domain: 'example.com') }
++        let(:object_json) do
++          {
++            id: 'bar',
++            type: 'EmojiReact',
++            content: ':coolcat:',
++            tag: [
++              {
++                type: 'Emoji',
++                icon: {
++                  url: 'http://example.com/emoji.png',
++                },
++                name: 'coolcat',
++              },
++            ],
++            actor: ActivityPub::TagManager.instance.uri_for(sender),
++            object: ActivityPub::TagManager.instance.uri_for(status),
++          }
++        end
++
++        before do
++          stub_request(:get, 'http://example.com/emoji.png').to_return(body: attachment_fixture('emojo.png'))
++
++          Fabricate(:status_reaction, account: sender, status: status, name: 'coolcat', custom_emoji: emoji)
++        end
++
++        it 'deletes reaction from sender to status' do
++          subject.perform
++          expect(sender.reacted?(status, 'coolcat', emoji)).to be false
++        end
+       end
+     end
+   end
+diff --git a/spec/mailers/notification_mailer_spec.rb b/spec/mailers/notification_mailer_spec.rb
+index 733cbaa615..aa94ef63a1 100644
+--- a/spec/mailers/notification_mailer_spec.rb
++++ b/spec/mailers/notification_mailer_spec.rb
+@@ -123,6 +123,30 @@ RSpec.describe NotificationMailer do
+     it_behaves_like 'delivery without status'
+   end
+ 
++  describe 'reaction' do
++    let(:reaction) { StatusReaction.create!(account: sender, status: own_status, name: '😂') }
++    let(:notification) { Notification.create!(account: receiver.account, activity: reaction) }
++    let(:mail) { prepared_mailer_for(own_status.account).reaction }
++
++    it_behaves_like 'localized subject', 'notification_mailer.reaction.subject', name: 'bob'
++
++    it 'renders the email' do
++      expect { mail.deliver }
++        .to send_email(
++          subject: 'bob reacted to your post'
++        )
++      expect(mail.text_part.body)
++        .to match('bob reacted to your post')
++        .and match('The body of the own status')
++      expect(mail)
++        .to have_thread_headers
++        .and have_standard_headers('reaction').for(receiver)
++    end
++
++    it_behaves_like 'delivery to non functional user'
++    it_behaves_like 'delivery without status'
++  end
++
+   describe 'reblog' do
+     let(:reblog) { Status.create!(account: sender, reblog: own_status) }
+     let(:notification) { Notification.create!(account: receiver.account, activity: reblog) }
+diff --git a/spec/models/status_reaction_spec.rb b/spec/models/status_reaction_spec.rb
+new file mode 100644
+index 0000000000..ccfa9ee8d8
+--- /dev/null
++++ b/spec/models/status_reaction_spec.rb
+@@ -0,0 +1,3 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
+diff --git a/spec/requests/api/v1/statuses/reactions_spec.rb b/spec/requests/api/v1/statuses/reactions_spec.rb
+new file mode 100644
+index 0000000000..f77ba6eab1
+--- /dev/null
++++ b/spec/requests/api/v1/statuses/reactions_spec.rb
+@@ -0,0 +1,153 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++
++RSpec.describe 'Reactions', :inline_jobs do
++  let(:user)    { Fabricate(:user) }
++  let(:scopes)  { 'write:favourites' }
++  let(:token)   { Fabricate(:accessible_access_token, resource_owner_id: user.id, scopes: scopes) }
++  let(:headers) { { 'Authorization' => "Bearer #{token.token}" } }
++
++  describe 'POST /api/v1/statuses/:status_id/react/:id' do
++    subject do
++      post "/api/v1/statuses/#{status.id}/react/#{escaped_emoji}", headers: headers
++    end
++
++    let(:status) { Fabricate(:status) }
++
++    it_behaves_like 'forbidden for wrong scope', 'read read:favourites'
++
++    context 'with public status' do
++      it 'reacts to the status successfully and includes updated json', :aggregate_failures do
++        subject
++
++        expect(response).to have_http_status(200)
++        expect(response.content_type)
++          .to start_with('application/json')
++        expect(user.account.reacted?(status, '😂')).to be true
++
++        expect(response.parsed_body).to match(
++          a_hash_including(id: status.id.to_s, reactions: [{ count: 1, me: true, name: '😂' }])
++        )
++      end
++    end
++
++    context 'with private status of not-followed account' do
++      let(:status) { Fabricate(:status, visibility: :private) }
++
++      it 'returns http not found' do
++        subject
++
++        expect(response).to have_http_status(404)
++        expect(response.content_type)
++          .to start_with('application/json')
++      end
++    end
++
++    context 'with private status of followed account' do
++      let(:status) { Fabricate(:status, visibility: :private) }
++
++      before do
++        user.account.follow!(status.account)
++      end
++
++      it 'reacts to the status successfully', :aggregate_failures do
++        subject
++
++        expect(response).to have_http_status(200)
++        expect(response.content_type)
++          .to start_with('application/json')
++        expect(user.account.reacted?(status, '😂')).to be true
++      end
++    end
++
++    context 'without an authorization header' do
++      let(:headers) { {} }
++
++      it 'returns http unauthorized' do
++        subject
++
++        expect(response).to have_http_status(401)
++        expect(response.content_type)
++          .to start_with('application/json')
++      end
++    end
++  end
++
++  describe 'POST /api/v1/statuses/:status_id/unreact/:id' do
++    subject do
++      post "/api/v1/statuses/#{status.id}/unreact/#{escaped_emoji}", headers: headers
++    end
++
++    let(:status) { Fabricate(:status) }
++
++    it_behaves_like 'forbidden for wrong scope', 'read read:favourites'
++
++    context 'with public status' do
++      before do
++        ReactService.new.call(user.account, status, '😂')
++      end
++
++      it 'unreacts the status successfully and includes updated json', :aggregate_failures do
++        subject
++
++        expect(response).to have_http_status(200)
++        expect(response.content_type)
++          .to start_with('application/json')
++
++        expect(user.account.reacted?(status, '😂')).to be false
++
++        expect(response.parsed_body).to match(
++          a_hash_including(id: status.id.to_s, reactions: [])
++        )
++      end
++    end
++
++    context 'when the requesting user was blocked by the status author' do
++      before do
++        ReactService.new.call(user.account, status, '😂')
++        status.account.block!(user.account)
++      end
++
++      it 'unreacts the status successfully and includes updated json', :aggregate_failures do
++        subject
++
++        expect(response).to have_http_status(200)
++        expect(response.content_type)
++          .to start_with('application/json')
++
++        expect(user.account.reacted?(status, '😂')).to be false
++
++        expect(response.parsed_body).to match(
++          a_hash_including(id: status.id.to_s, reactions: [])
++        )
++      end
++    end
++
++    context 'when status is not reacted' do
++      it 'returns http success' do
++        subject
++
++        expect(response).to have_http_status(200)
++        expect(response.content_type)
++          .to start_with('application/json')
++      end
++    end
++
++    context 'with private status that was not reacted' do
++      let(:status) { Fabricate(:status, visibility: :private) }
++
++      it 'returns http not found' do
++        subject
++
++        expect(response).to have_http_status(404)
++        expect(response.content_type)
++          .to start_with('application/json')
++      end
++    end
++  end
++
++  def escaped_emoji
++    CGI.escape('😂')
++  end
++end
+diff --git a/spec/requests/api/web/push_subscriptions_spec.rb b/spec/requests/api/web/push_subscriptions_spec.rb
+index 4f4b56ba73..34de50dbeb 100644
+--- a/spec/requests/api/web/push_subscriptions_spec.rb
++++ b/spec/requests/api/web/push_subscriptions_spec.rb
+@@ -25,6 +25,7 @@ RSpec.describe 'API Web Push Subscriptions' do
+           follow: true,
+           follow_request: false,
+           favourite: false,
++          reaction: false,
+           reblog: true,
+           mention: false,
+           poll: true,

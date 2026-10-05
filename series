@@ -1,0 +1,8 @@
+# Applied in this order on top of .base-commit (glitch-soc main).
+# Each entry is a `git format-patch` mail file that can be applied with
+# `git am` (plain commits) or `stg import` (Stacked Git stack).
+0001-feature-reaction-list.patch
+0002-feature-bubble-timeline.patch
+0003-feature-gif-picker.patch
+0004-fedi-branding-themes.patch
+0005-fedi-compat-overlay.patch

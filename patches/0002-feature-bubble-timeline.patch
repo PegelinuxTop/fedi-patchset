@@ -1,0 +1,2603 @@
+From 4792bc615f2e995e3a5a72f38cd62b92a0fc45c6 Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Tue, 6 Oct 2026 01:07:48 +0700
+Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
+ settings (Essem, rebased onto latest glitch-soc)
+
+---
+ .../admin/bubble_domains_controller.rb        |  49 +++++
+ .../v1/instances/bubble_domains_controller.rb |  35 +++
+ .../api/v1/timelines/public_controller.rb     |   9 +-
+ .../api/v1/timelines/topic_controller.rb      |   2 +
+ .../flavours/glitch/actions/server.ts         |   9 +
+ .../flavours/glitch/actions/streaming.js      |  12 ++
+ .../flavours/glitch/actions/timelines.js      |   2 +
+ .../flavours/glitch/api/instance.ts           |   3 +
+ .../flavours/glitch/features/about/index.jsx  |  38 +++-
+ .../components/column_settings.jsx            |  50 +++++
+ .../components/feed_column_settings.tsx       |  69 ++++++
+ .../containers/column_settings_container.js   |  29 +++
+ .../glitch/features/bubble_timeline/index.jsx | 201 ++++++++++++++++++
+ .../glitch/features/compose/index.tsx         |  15 ++
+ .../glitch/features/firehose/index.jsx        | 135 ++++++++----
+ .../features/hashtag_timeline/index.jsx       |   2 +
+ .../features/navigation_panel/index.tsx       |   6 +-
+ .../columns_area/multi_column_content.tsx     |   2 +
+ .../flavours/glitch/features/ui/index.jsx     |   3 +
+ .../flavours/glitch/reducers/server.ts        |  28 +++
+ .../features/hashtag_timeline/index.jsx       |   2 +
+ .../material-icons/400-24px/bubble_chart.svg  |   1 +
+ app/models/account.rb                         |   8 +-
+ app/models/bubble_domain.rb                   |  41 ++++
+ app/models/form/admin_settings.rb             |  22 +-
+ app/models/link_feed.rb                       |   5 +
+ app/models/public_feed.rb                     |  22 +-
+ app/models/tag_feed.rb                        |   6 +
+ app/policies/bubble_domain_policy.rb          |   7 +
+ app/services/batched_remove_status_service.rb |   7 +-
+ app/services/fan_out_on_write_service.rb      |   4 +-
+ app/services/remove_status_service.rb         |   2 +
+ .../bubble_domains/_bubble_domain.html.haml   |   5 +
+ .../admin/bubble_domains/index.html.haml      |  18 ++
+ app/views/admin/bubble_domains/new.html.haml  |  11 +
+ app/views/admin/settings/about/show.html.haml |   8 +
+ .../admin/settings/discovery/show.html.haml   |  14 ++
+ config/locales/en.yml                         |  22 ++
+ config/navigation.rb                          |   1 +
+ config/routes/admin.rb                        |   2 +
+ config/routes/web_app.rb                      |   1 +
+ config/settings.yml                           |   6 +
+ .../20240114042123_create_bubble_domains.rb   |  13 ++
+ ...804_add_bubble_timeline_preview_setting.rb |  19 ++
+ ...d_bubble_timeline_topic_preview_setting.rb |  19 ++
+ db/schema.rb                                  |  23 ++
+ lib/mastodon/cli/bubble_domains.rb            |  81 +++++++
+ lib/mastodon/cli/main.rb                      |   4 +
+ spec/fabricators/bubble_domain_fabricator.rb  |   5 +
+ spec/lib/mastodon/cli/bubble_domains_spec.rb  | 100 +++++++++
+ spec/models/bubble_domain_spec.rb             |  53 +++++
+ spec/models/public_feed_spec.rb               |   1 +
+ spec/models/tag_feed_spec.rb                  |   1 +
+ spec/requests/admin/bubble_domains_spec.rb    |  16 ++
+ .../api/v1/instances/bubble_domains_spec.rb   | 137 ++++++++++++
+ spec/requests/api/v1/timelines/link_spec.rb   |   3 +-
+ spec/requests/api/v1/timelines/public_spec.rb |   3 +-
+ spec/requests/api/v1/timelines/tag_spec.rb    |   3 +-
+ streaming/index.js                            |  43 +++-
+ 59 files changed, 1362 insertions(+), 76 deletions(-)
+ create mode 100644 app/controllers/admin/bubble_domains_controller.rb
+ create mode 100644 app/controllers/api/v1/instances/bubble_domains_controller.rb
+ create mode 100644 app/javascript/flavours/glitch/features/bubble_timeline/components/column_settings.jsx
+ create mode 100644 app/javascript/flavours/glitch/features/bubble_timeline/components/feed_column_settings.tsx
+ create mode 100644 app/javascript/flavours/glitch/features/bubble_timeline/containers/column_settings_container.js
+ create mode 100644 app/javascript/flavours/glitch/features/bubble_timeline/index.jsx
+ create mode 100644 app/javascript/material-icons/400-24px/bubble_chart.svg
+ create mode 100644 app/models/bubble_domain.rb
+ create mode 100644 app/policies/bubble_domain_policy.rb
+ create mode 100644 app/views/admin/bubble_domains/_bubble_domain.html.haml
+ create mode 100644 app/views/admin/bubble_domains/index.html.haml
+ create mode 100644 app/views/admin/bubble_domains/new.html.haml
+ create mode 100644 db/migrate/20240114042123_create_bubble_domains.rb
+ create mode 100644 db/migrate/20251018223804_add_bubble_timeline_preview_setting.rb
+ create mode 100644 db/migrate/20251024193240_add_bubble_timeline_topic_preview_setting.rb
+ create mode 100644 lib/mastodon/cli/bubble_domains.rb
+ create mode 100644 spec/fabricators/bubble_domain_fabricator.rb
+ create mode 100644 spec/lib/mastodon/cli/bubble_domains_spec.rb
+ create mode 100644 spec/models/bubble_domain_spec.rb
+ create mode 100644 spec/requests/admin/bubble_domains_spec.rb
+ create mode 100644 spec/requests/api/v1/instances/bubble_domains_spec.rb
+
+diff --git a/app/controllers/admin/bubble_domains_controller.rb b/app/controllers/admin/bubble_domains_controller.rb
+new file mode 100644
+index 0000000000..13ac90dccd
+--- /dev/null
++++ b/app/controllers/admin/bubble_domains_controller.rb
+@@ -0,0 +1,49 @@
++# frozen_string_literal: true
++
++module Admin
++  class BubbleDomainsController < BaseController
++    before_action :set_bubble_domain, except: [:index, :new, :create]
++
++    def index
++      authorize :bubble_domain, :update?
++      @bubble_domains = BubbleDomain.all
++    end
++
++    def new
++      authorize :bubble_domain, :update?
++      @bubble_domain = BubbleDomain.new(domain: params[:_domain])
++    end
++
++    def create
++      authorize :bubble_domain, :update?
++
++      domain = TagManager.instance.normalize_domain(resource_params[:domain])
++
++      @bubble_domain = BubbleDomain.new(domain: domain)
++
++      if @bubble_domain.save
++        log_action :create, @bubble_domain
++        redirect_to admin_bubble_domains_path, notice: I18n.t('admin.bubble_domains.created_msg')
++      else
++        render :new
++      end
++    end
++
++    def destroy
++      authorize :bubble_domain, :update?
++      @bubble_domain.destroy
++      log_action :destroy, @bubble_domain
++      redirect_to admin_bubble_domains_path
++    end
++
++    private
++
++    def set_bubble_domain
++      @bubble_domain = BubbleDomain.find(params[:id])
++    end
++
++    def resource_params
++      params.expect(bubble_domain: [:domain])
++    end
++  end
++end
+diff --git a/app/controllers/api/v1/instances/bubble_domains_controller.rb b/app/controllers/api/v1/instances/bubble_domains_controller.rb
+new file mode 100644
+index 0000000000..95880cfaf2
+--- /dev/null
++++ b/app/controllers/api/v1/instances/bubble_domains_controller.rb
+@@ -0,0 +1,35 @@
++# frozen_string_literal: true
++
++class Api::V1::Instances::BubbleDomainsController < Api::V1::Instances::BaseController
++  before_action :require_enabled_api!
++
++  vary_by '', if: -> { Setting.show_bubble_domains == 'all' }
++
++  def index
++    if Setting.show_bubble_domains == 'all'
++      cache_even_if_authenticated!
++    else
++      cache_if_unauthenticated!
++    end
++
++    render json: BubbleDomain.bubble_domains
++  end
++
++  private
++
++  def require_enabled_api!
++    head 404 unless api_enabled?
++  end
++
++  def api_enabled?
++    show_bubble_domains_for_all? || show_bubble_domains_to_user?
++  end
++
++  def show_bubble_domains_for_all?
++    Setting.show_bubble_domains == 'all'
++  end
++
++  def show_bubble_domains_to_user?
++    Setting.show_bubble_domains == 'users' && user_signed_in? && current_user.functional_or_moved?
++  end
++end
+diff --git a/app/controllers/api/v1/timelines/public_controller.rb b/app/controllers/api/v1/timelines/public_controller.rb
+index 7110972dea..b56ca0d993 100644
+--- a/app/controllers/api/v1/timelines/public_controller.rb
++++ b/app/controllers/api/v1/timelines/public_controller.rb
+@@ -4,7 +4,7 @@ class Api::V1::Timelines::PublicController < Api::V1::Timelines::BaseController
+   before_action -> { authorize_if_got_token! :read, :'read:statuses' }
+   before_action :require_user!, if: :require_auth?
+ 
+-  PERMITTED_PARAMS = %i(local remote limit only_media allow_local_only).freeze
++  PERMITTED_PARAMS = %i(local remote bubble limit only_media allow_local_only).freeze
+ 
+   def show
+     cache_if_unauthenticated!
+@@ -17,6 +17,8 @@ class Api::V1::Timelines::PublicController < Api::V1::Timelines::BaseController
+   def require_auth?
+     if truthy_param?(:local)
+       Setting.local_live_feed_access != 'public'
++    elsif truthy_param?(:bubble)
++      Setting.bubble_live_feed_access != 'public'
+     elsif truthy_param?(:remote)
+       Setting.remote_live_feed_access != 'public'
+     else
+@@ -45,11 +47,12 @@ class Api::V1::Timelines::PublicController < Api::V1::Timelines::BaseController
+     PublicFeed.new(
+       current_account,
+       local: truthy_param?(:local),
++      bubble: truthy_param?(:bubble),
+       remote: truthy_param?(:remote),
+       only_media: truthy_param?(:only_media),
+       allow_local_only: truthy_param?(:allow_local_only),
+-      with_replies: Setting.show_replies_in_public_timelines,
+-      with_reblogs: Setting.show_reblogs_in_public_timelines
++      with_replies: truthy_param?(:local) ? Setting.show_replies_in_local_timelines : Setting.show_replies_in_federated_timelines,
++      with_reblogs: truthy_param?(:local) ? Setting.show_reblogs_in_local_timelines : Setting.show_reblogs_in_federated_timelines
+     )
+   end
+ 
+diff --git a/app/controllers/api/v1/timelines/topic_controller.rb b/app/controllers/api/v1/timelines/topic_controller.rb
+index 6faf54f708..04da512e85 100644
+--- a/app/controllers/api/v1/timelines/topic_controller.rb
++++ b/app/controllers/api/v1/timelines/topic_controller.rb
+@@ -8,6 +8,8 @@ class Api::V1::Timelines::TopicController < Api::V1::Timelines::BaseController
+   def require_auth?
+     if truthy_param?(:local)
+       Setting.local_topic_feed_access != 'public'
++    elsif truthy_param?(:bubble)
++      Setting.bubble_topic_feed_access != 'public'
+     elsif truthy_param?(:remote)
+       Setting.remote_topic_feed_access != 'public'
+     else
+diff --git a/app/javascript/flavours/glitch/actions/server.ts b/app/javascript/flavours/glitch/actions/server.ts
+index 4b5103de72..76ffffc052 100644
+--- a/app/javascript/flavours/glitch/actions/server.ts
++++ b/app/javascript/flavours/glitch/actions/server.ts
+@@ -3,6 +3,7 @@ import {
+   apiGetExtendedDescription,
+   apiGetDomainBlocks,
+   apiGetTranslationLanguages,
++  apiGetBubbleDomains,
+ } from 'flavours/glitch/api/instance';
+ import { createDataLoadingThunk } from 'flavours/glitch/store/typed_functions';
+ 
+@@ -46,3 +47,11 @@ export const fetchDomainBlocks = createDataLoadingThunk(
+     condition: (_, { getState }) => !getState().server.domainBlocks.isLoading,
+   },
+ );
++
++export const fetchBubbleDomains = createDataLoadingThunk(
++  'server/bubble_domains',
++  () => apiGetBubbleDomains(),
++  {
++    condition: (_, { getState }) => !getState().server.bubbleDomains.isLoading,
++  },
++);
+diff --git a/app/javascript/flavours/glitch/actions/streaming.js b/app/javascript/flavours/glitch/actions/streaming.js
+index 0f2023c420..86a11838dd 100644
+--- a/app/javascript/flavours/glitch/actions/streaming.js
++++ b/app/javascript/flavours/glitch/actions/streaming.js
+@@ -23,6 +23,7 @@ import {
+   fillPublicTimelineGaps,
+   fillCommunityTimelineGaps,
+   fillListTimelineGaps,
++  fillBubbleTimelineGaps,
+ } from './timelines';
+ 
+ /**
+@@ -183,6 +184,17 @@ export const connectCommunityStream = ({ onlyMedia } = {}) =>
+     fillGaps: () => (fillCommunityTimelineGaps({ onlyMedia }))
+   });
+ 
++/**
++ * @param {Object} options
++ * @param {boolean} [options.onlyMedia]
++ * @returns {StreamThunk}
++ */
++export const connectBubbleStream = ({ onlyMedia } = {}) =>
++  connectTimelineStream(`bubble${onlyMedia ? ':media' : ''}`, `public:bubble${onlyMedia ? ':media' : ''}`, {}, {
++    // @ts-expect-error
++    fillGaps: () => (fillBubbleTimelineGaps({ onlyMedia }))
++  });
++
+ /**
+  * @param {Object} options
+  * @param {boolean} [options.onlyMedia]
+diff --git a/app/javascript/flavours/glitch/actions/timelines.js b/app/javascript/flavours/glitch/actions/timelines.js
+index 201c864712..2bc31e2b77 100644
+--- a/app/javascript/flavours/glitch/actions/timelines.js
++++ b/app/javascript/flavours/glitch/actions/timelines.js
+@@ -168,6 +168,7 @@ export function fillTimelineGaps(timelineId, path, params = {}) {
+ export const expandHomeTimeline            = ({ maxId } = {}) => expandTimeline('home', '/api/v1/timelines/home', { max_id: maxId, exclude_direct: isRedesignEnabled() });
+ export const expandPublicTimeline          = ({ maxId, onlyMedia, onlyRemote, allowLocalOnly } = {}) => expandTimeline(`public${onlyRemote ? ':remote' : (allowLocalOnly ? ':allow_local_only' : '')}${onlyMedia ? ':media' : ''}`, '/api/v1/timelines/public', { remote: !!onlyRemote, allow_local_only: !!allowLocalOnly, max_id: maxId, only_media: !!onlyMedia });
+ export const expandCommunityTimeline       = ({ maxId, onlyMedia } = {}) => expandTimeline(`community${onlyMedia ? ':media' : ''}`, '/api/v1/timelines/public', { local: true, max_id: maxId, only_media: !!onlyMedia });
++export const expandBubbleTimeline          = ({ maxId, onlyMedia } = {}) => expandTimeline(`bubble${onlyMedia ? ':media' : ''}`, '/api/v1/timelines/public', { bubble: true, max_id: maxId, only_media: !!onlyMedia });
+ export const expandDirectTimeline          = ({ maxId } = {}) => expandTimeline('direct', '/api/v1/timelines/direct', { max_id: maxId });
+ export const expandAccountTimeline         = (accountId, { maxId, withReplies, tagged } = {}) => expandTimeline(`account:${accountId}${withReplies ? ':with_replies' : ''}${tagged ? `:${tagged}` : ''}`, `/api/v1/accounts/${accountId}/statuses`, { exclude_replies: !withReplies, exclude_reblogs: withReplies, tagged, max_id: maxId });
+ export const expandAccountFeaturedTimeline = (accountId, { tagged } = {}) => expandTimeline(`account:${accountId}:pinned`, `/api/v1/accounts/${accountId}/statuses`, { pinned: true, tagged });
+@@ -187,6 +188,7 @@ export const expandHashtagTimeline         = (hashtag, { maxId, tags, local } =
+ export const fillHomeTimelineGaps      = () => fillTimelineGaps('home', '/api/v1/timelines/home', {});
+ export const fillPublicTimelineGaps    = ({ onlyMedia, onlyRemote, allowLocalOnly } = {}) => fillTimelineGaps(`public${onlyRemote ? ':remote' : (allowLocalOnly ? ':allow_local_only' : '')}${onlyMedia ? ':media' : ''}`, '/api/v1/timelines/public', { remote: !!onlyRemote, only_media: !!onlyMedia, allow_local_only: !!allowLocalOnly });
+ export const fillCommunityTimelineGaps = ({ onlyMedia } = {}) => fillTimelineGaps(`community${onlyMedia ? ':media' : ''}`, '/api/v1/timelines/public', { local: true, only_media: !!onlyMedia });
++export const fillBubbleTimelineGaps    = ({ onlyMedia } = {}) => fillTimelineGaps(`bubble${onlyMedia ? ':media' : ''}`, '/api/v1/timelines/public', { bubble: true, only_media: !!onlyMedia });
+ export const fillListTimelineGaps      = (id) => fillTimelineGaps(`list:${id}`, `/api/v1/timelines/list/${id}`, {});
+ 
+ export function expandTimelineRequest(timeline, isLoadingMore) {
+diff --git a/app/javascript/flavours/glitch/api/instance.ts b/app/javascript/flavours/glitch/api/instance.ts
+index aecf27c613..100a78fa89 100644
+--- a/app/javascript/flavours/glitch/api/instance.ts
++++ b/app/javascript/flavours/glitch/api/instance.ts
+@@ -31,3 +31,6 @@ export const apiGetTranslationLanguages = () =>
+ 
+ export const apiGetDomainBlocks = () =>
+   apiRequestGet<ApiDomainBlockJSON[]>('v1/instance/domain_blocks');
++
++export const apiGetBubbleDomains = () =>
++  apiRequestGet<string[]>('v1/instance/bubble_domains');
+diff --git a/app/javascript/flavours/glitch/features/about/index.jsx b/app/javascript/flavours/glitch/features/about/index.jsx
+index 8954abd901..b263b53c41 100644
+--- a/app/javascript/flavours/glitch/features/about/index.jsx
++++ b/app/javascript/flavours/glitch/features/about/index.jsx
+@@ -12,7 +12,7 @@ import { connect } from 'react-redux';
+ import { domain } from 'flavours/glitch/initial_state';
+ 
+ import { injectIntl } from '@/flavours/glitch/components/intl';
+-import { fetchServer, fetchExtendedDescription, fetchDomainBlocks  } from 'flavours/glitch/actions/server';
++import { fetchServer, fetchExtendedDescription, fetchDomainBlocks, fetchBubbleDomains  } from 'flavours/glitch/actions/server';
+ import { Account } from 'flavours/glitch/components/account';
+ import { Column } from '@/flavours/glitch/components/column';
+ import { NavigationFocusTarget } from 'flavours/glitch/components/navigation_focus_target';
+@@ -32,6 +32,7 @@ import classes from './styles.module.scss';
+ const messages = defineMessages({
+   title: { id: 'column.about', defaultMessage: 'About' },
+   blocks: { id: 'about.blocks', defaultMessage: 'Moderated servers' },
++  bubble: { id: 'about.bubble.title', defaultMessage: 'Bubble servers' },
+   silenced: { id: 'about.domain_blocks.silenced.title', defaultMessage: 'Limited' },
+   silencedExplanation: { id: 'about.domain_blocks.silenced.explanation', defaultMessage: 'You will generally not see profiles and content from this server, unless you explicitly look it up or opt into it by following.' },
+   suspended: { id: 'about.domain_blocks.suspended.title', defaultMessage: 'Suspended' },
+@@ -55,6 +56,7 @@ const mapStateToProps = state => ({
+   locale: state.getIn(['meta', 'locale']),
+   extendedDescription: state.server.extendedDescription,
+   domainBlocks: state.server.domainBlocks,
++  bubbleDomains: state.server.bubbleDomains,
+ });
+ 
+ class About extends PureComponent {
+@@ -68,6 +70,11 @@ class About extends PureComponent {
+       isAvailable: PropTypes.bool,
+       items: ImmutablePropTypes.list,
+     }),
++    bubbleDomains: ImmutablePropTypes.contains({
++      isLoading: PropTypes.bool,
++      isAvailable: PropTypes.bool,
++      items: ImmutablePropTypes.list,
++    }),
+     dispatch: PropTypes.func.isRequired,
+     intl: PropTypes.object.isRequired,
+     multiColumn: PropTypes.bool,
+@@ -84,8 +91,13 @@ class About extends PureComponent {
+     dispatch(fetchDomainBlocks());
+   };
+ 
++  handleBubbleDomainsOpen = () => {
++    const { dispatch } = this.props;
++    dispatch(fetchBubbleDomains());
++  };
++
+   render () {
+-    const { multiColumn, intl, server, extendedDescription, domainBlocks, locale } = this.props;
++    const { multiColumn, intl, server, extendedDescription, domainBlocks, bubbleDomains, locale } = this.props;
+     const isLoading = server.isLoading;
+ 
+     return (
+@@ -153,6 +165,28 @@ class About extends PureComponent {
+ 
+           <RulesSection />
+ 
++          <Section title={intl.formatMessage(messages.bubble)} onOpen={this.handleBubbleDomainsOpen}>
++            {bubbleDomains.isLoading ? (
++              <Skeleton width='100%' />
++            ) : (bubbleDomains.isAvailable ? (
++              <>
++                <p><FormattedMessage id='about.bubble.preamble' defaultMessage='This server provides a "bubble timeline", which displays content from these other servers in the fediverse that have been chosen by the admins of this server.' /></p>
++
++                {bubbleDomains.items.length > 0 && (
++                  <div className='about__bubble-domains'>
++                    {bubbleDomains.items.map(domain => (
++                      <div className='about__bubble-domains__domain' key={domain}>
++                        <h6 className='about__bubble-domains__domain__header'>{domain}</h6>
++                      </div>
++                    ))}
++                  </div>
++                )}
++              </>
++            ) : (
++              <p><FormattedMessage id='about.not_available' defaultMessage='This information has not been made available on this server.' /></p>
++            ))}
++          </Section>
++
+           <Section title={intl.formatMessage(messages.blocks)} onOpen={this.handleDomainBlocksOpen}>
+             {domainBlocks.isLoading ? (
+               <>
+diff --git a/app/javascript/flavours/glitch/features/bubble_timeline/components/column_settings.jsx b/app/javascript/flavours/glitch/features/bubble_timeline/components/column_settings.jsx
+new file mode 100644
+index 0000000000..154559e68d
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/bubble_timeline/components/column_settings.jsx
+@@ -0,0 +1,50 @@
++import PropTypes from 'prop-types';
++import { PureComponent } from 'react';
++
++import { defineMessages, FormattedMessage } from 'react-intl';
++
++import ImmutablePropTypes from 'react-immutable-proptypes';
++
++import { injectIntl } from '@/flavours/glitch/components/intl';
++import SettingText from '@/flavours/glitch/components/setting_text';
++import SettingToggle from '@/flavours/glitch/features/notifications/components/setting_toggle';
++
++const messages = defineMessages({
++  filter_regex: { id: 'home.column_settings.filter_regex', defaultMessage: 'Filter out by regular expressions' },
++  settings: { id: 'home.settings', defaultMessage: 'Column settings' },
++});
++
++class ColumnSettings extends PureComponent {
++
++  static propTypes = {
++    settings: ImmutablePropTypes.map.isRequired,
++    onChange: PropTypes.func.isRequired,
++    intl: PropTypes.object.isRequired,
++    columnId: PropTypes.string,
++  };
++
++  render () {
++    const { settings, onChange, intl } = this.props;
++
++    return (
++      <div className='column-settings'>
++        <section>
++          <div className='column-settings__row'>
++            <SettingToggle settings={settings} settingPath={['other', 'onlyMedia']} onChange={onChange} label={<FormattedMessage id='bubble.column_settings.media_only' defaultMessage='Media only' />} />
++          </div>
++        </section>
++
++        <section>
++          <span className='column-settings__section'><FormattedMessage id='home.column_settings.advanced' defaultMessage='Advanced' /></span>
++
++          <div className='column-settings__row'>
++            <SettingText settings={settings} settingPath={['regex', 'body']} onChange={onChange} label={intl.formatMessage(messages.filter_regex)} />
++          </div>
++        </section>
++      </div>
++    );
++  }
++
++}
++
++export default injectIntl(ColumnSettings);
+diff --git a/app/javascript/flavours/glitch/features/bubble_timeline/components/feed_column_settings.tsx b/app/javascript/flavours/glitch/features/bubble_timeline/components/feed_column_settings.tsx
+new file mode 100644
+index 0000000000..8baa54d5df
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/bubble_timeline/components/feed_column_settings.tsx
+@@ -0,0 +1,69 @@
++import { useCallback } from 'react';
++
++import { FormattedMessage } from 'react-intl';
++
++import type {
++  List as ImmutableList,
++  Map as ImmutableMap,
++  Record as ImmutableRecord,
++} from 'immutable';
++
++import { changeColumnParams } from '@/flavours/glitch/actions/columns';
++import { MenuItemCheckbox } from '@/flavours/glitch/components/menu';
++import type { MenuItemCheckboxChangeHandler } from '@/flavours/glitch/components/menu/items';
++import { useAppSelector, useAppDispatch } from 'flavours/glitch/store';
++
++import { changeSetting } from '../../../actions/settings';
++
++type Columns = ImmutableList<
++  ImmutableRecord<{
++    uuid: string;
++    params?: string;
++  }>
++>;
++
++export function useColumnSettings(columnId: string | undefined) {
++  return useAppSelector((state) => {
++    const columns = state.settings.get('columns') as Columns;
++    const index = columns.findIndex((c) => c.get('uuid') === columnId);
++
++    return columnId && index >= 0
++      ? columns.get(index)?.get('params')
++      : state.settings.get('bubble');
++  }) as ImmutableMap<string, unknown>;
++}
++
++export const FeedColumnSettings: React.FC<{
++  columnId: string | undefined;
++}> = ({ columnId }) => {
++  const dispatch = useAppDispatch();
++
++  const settings = useColumnSettings(columnId);
++
++  const onChange = useCallback<MenuItemCheckboxChangeHandler>(
++    ({ value, checked }) => {
++      if (columnId) {
++        dispatch(changeColumnParams(columnId, ['other', value], checked));
++      } else {
++        dispatch(changeSetting(['bubble', 'other', value], checked));
++      }
++    },
++    [columnId, dispatch],
++  );
++
++  const onlyMedia = settings.getIn(['other', 'onlyMedia']) as boolean;
++
++  return (
++    <MenuItemCheckbox
++      value='onlyMedia'
++      checked={onlyMedia}
++      onChange={onChange}
++      keepMenuOpenOnClick
++    >
++      <FormattedMessage
++        id='community.column_settings.media_only'
++        defaultMessage='Media only'
++      />
++    </MenuItemCheckbox>
++  );
++};
+diff --git a/app/javascript/flavours/glitch/features/bubble_timeline/containers/column_settings_container.js b/app/javascript/flavours/glitch/features/bubble_timeline/containers/column_settings_container.js
+new file mode 100644
+index 0000000000..95e589df8d
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/bubble_timeline/containers/column_settings_container.js
+@@ -0,0 +1,29 @@
++import { connect } from 'react-redux';
++
++import { changeColumnParams } from '../../../actions/columns';
++import { changeSetting } from '../../../actions/settings';
++import ColumnSettings from '../components/column_settings';
++
++const mapStateToProps = (state, { columnId }) => {
++  const uuid = columnId;
++  const columns = state.getIn(['settings', 'columns']);
++  const index = columns.findIndex(c => c.get('uuid') === uuid);
++
++  return {
++    settings: (uuid && index >= 0) ? columns.get(index).get('params') : state.getIn(['settings', 'bubble']),
++  };
++};
++
++const mapDispatchToProps = (dispatch, { columnId }) => {
++  return {
++    onChange (key, checked) {
++      if (columnId) {
++        dispatch(changeColumnParams(columnId, key, checked));
++      } else {
++        dispatch(changeSetting(['bubble', ...key], checked));
++      }
++    },
++  };
++};
++
++export default connect(mapStateToProps, mapDispatchToProps)(ColumnSettings);
+diff --git a/app/javascript/flavours/glitch/features/bubble_timeline/index.jsx b/app/javascript/flavours/glitch/features/bubble_timeline/index.jsx
+new file mode 100644
+index 0000000000..82b28c7cb9
+--- /dev/null
++++ b/app/javascript/flavours/glitch/features/bubble_timeline/index.jsx
+@@ -0,0 +1,201 @@
++import PropTypes from 'prop-types';
++import { PureComponent } from 'react';
++
++import { defineMessages, FormattedMessage } from 'react-intl';
++
++import { Helmet } from '@unhead/react/helmet';
++
++import { connect } from 'react-redux';
++
++import { injectIntl } from '@/flavours/glitch/components/intl';
++import BubbleChartIcon from '@/material-icons/400-24px/bubble_chart.svg?react';
++import { Column } from '@/flavours/glitch/components/column';
++import { ColumnHeader as LegacyColumnHeader } from '@/flavours/glitch/components/column/header';
++import { DismissableBanner } from 'flavours/glitch/components/dismissable_banner';
++import { identityContextPropShape, withIdentity } from 'flavours/glitch/identity_context';
++import { domain, bubbleLiveFeedAccess } from 'flavours/glitch/initial_state';
++import { canViewFeed } from 'flavours/glitch/permissions';
++
++import { addColumn, removeColumn, moveColumn } from '../../actions/columns';
++import { connectBubbleStream } from '../../actions/streaming';
++import { expandBubbleTimeline } from '../../actions/timelines';
++import StatusListContainer from '../ui/containers/status_list_container';
++
++import ColumnSettingsContainer from './containers/column_settings_container';
++import { isRedesignEnabled } from '@/flavours/glitch/utils/environment';
++import { ColumnHeader, ColumnSettingsMenu } from '@/flavours/glitch/components/column_header';
++import { FeedColumnSettings } from './components/feed_column_settings';
++import { MultiColumnMenuItems } from '@/flavours/glitch/components/column_header/multicolumn_settings';
++
++const messages = defineMessages({
++  title: { id: 'column.bubble', defaultMessage: 'Bubble timeline' },
++  title_redesign: { id: 'column.bubble_servers', defaultMessage: 'Bubble Servers' },
++});
++
++const mapStateToProps = (state, { columnId }) => {
++  const uuid = columnId;
++  const columns = state.getIn(['settings', 'columns']);
++  const index = columns.findIndex(c => c.get('uuid') === uuid);
++  const onlyMedia = (columnId && index >= 0) ? columns.get(index).getIn(['params', 'other', 'onlyMedia']) : state.getIn(['settings', 'bubble', 'other', 'onlyMedia']);
++  const regex = (columnId && index >= 0) ? columns.get(index).getIn(['params', 'regex', 'body']) : state.getIn(['settings', 'bubble', 'regex', 'body']);
++  const timelineState = state.getIn(['timelines', `bubble${onlyMedia ? ':media' : ''}`]);
++
++  return {
++    hasUnread: !!timelineState && timelineState.get('unread') > 0,
++    onlyMedia,
++    regex,
++  };
++};
++
++class BubbleTimeline extends PureComponent {
++  static defaultProps = {
++    onlyMedia: false,
++  };
++
++  static propTypes = {
++    identity: identityContextPropShape,
++    dispatch: PropTypes.func.isRequired,
++    columnId: PropTypes.string,
++    intl: PropTypes.object.isRequired,
++    hasUnread: PropTypes.bool,
++    multiColumn: PropTypes.bool,
++    onlyMedia: PropTypes.bool,
++    regex: PropTypes.string,
++  };
++
++  handlePin = () => {
++    const { columnId, dispatch, onlyMedia } = this.props;
++
++    if (columnId) {
++      dispatch(removeColumn(columnId));
++    } else {
++      dispatch(addColumn('BUBBLE', { other: { onlyMedia } }));
++    }
++  };
++
++  handleMove = (dir) => {
++    const { columnId, dispatch } = this.props;
++    dispatch(moveColumn(columnId, dir));
++  };
++
++  componentDidMount () {
++    const { dispatch, onlyMedia } = this.props;
++    const { signedIn } = this.props.identity;
++
++    dispatch(expandBubbleTimeline({ onlyMedia }));
++
++    if (signedIn) {
++      this.disconnect = dispatch(connectBubbleStream({ onlyMedia }));
++    }
++  }
++
++  componentDidUpdate (prevProps) {
++    const { signedIn } = this.props.identity;
++
++    if (prevProps.onlyMedia !== this.props.onlyMedia) {
++      const { dispatch, onlyMedia } = this.props;
++
++      if (this.disconnect) {
++        this.disconnect();
++      }
++
++      dispatch(expandBubbleTimeline({ onlyMedia }));
++
++      if (signedIn) {
++        this.disconnect = dispatch(connectBubbleStream({ onlyMedia }));
++      }
++    }
++  }
++
++  componentWillUnmount () {
++    if (this.disconnect) {
++      this.disconnect();
++      this.disconnect = null;
++    }
++  }
++
++  handleLoadMore = maxId => {
++    const { dispatch, onlyMedia } = this.props;
++
++    dispatch(expandBubbleTimeline({ maxId, onlyMedia }));
++  };
++
++  render () {
++    const { intl, hasUnread, columnId, multiColumn, onlyMedia } = this.props;
++    const { signedIn, permissions } = this.props.identity;
++    const pinned = !!columnId;
++
++    const emptyMessage = canViewFeed(signedIn, permissions, bubbleLiveFeedAccess) ? (
++      <FormattedMessage
++        id='empty_column.bubble'
++        defaultMessage='The bubble timeline is currently empty, but something might show up here soon!'
++      />
++    ) : (
++      <FormattedMessage
++        id='empty_column.disabled_feed'
++        defaultMessage='This feed has been disabled by your server administrators.'
++      />
++    );
++
++    const title = intl.formatMessage(isRedesignEnabled() ? messages.title_redesign : messages.title)
++
++    return (
++      <Column bindToDocument={!multiColumn} label={title}>
++        {isRedesignEnabled() ? (
++          <ColumnHeader
++            title={title}
++            withUnreadMarker={hasUnread}
++            extraButtons={
++              <ColumnSettingsMenu
++                labelPrefix={title}
++              >
++                <FeedColumnSettings columnId={columnId} />
++                {multiColumn && (
++                  <MultiColumnMenuItems
++                    withDivider
++                    pinned={pinned}
++                    onPin={this.handlePin}
++                    onMove={this.handleMove}
++                  />
++                )}
++              </ColumnSettingsMenu>
++            }
++          />
++        ) : (
++          <LegacyColumnHeader
++            icon='bubble'
++            iconComponent={BubbleChartIcon}
++            active={hasUnread}
++            title={title}
++            onPin={this.handlePin}
++            onMove={this.handleMove}
++            pinned={pinned}
++            multiColumn={multiColumn}
++            scrollTopOnClick
++          >
++            <ColumnSettingsContainer columnId={columnId} />
++          </LegacyColumnHeader>
++        )}
++
++        <StatusListContainer
++          prepend={<DismissableBanner id='bubble_timeline'><FormattedMessage id='dismissable_banner.bubble_timeline' defaultMessage='These are the most recent public posts from people on the fediverse whose accounts are on other servers selected by {domain}.' values={{ domain }} /></DismissableBanner>}
++          trackScroll={!pinned}
++          scrollKey={`bubble_timeline-${columnId}`}
++          timelineId={`bubble${onlyMedia ? ':media' : ''}`}
++          onLoadMore={this.handleLoadMore}
++          emptyMessage={emptyMessage}
++          bindToDocument={!multiColumn}
++          regex={this.props.regex}
++        />
++
++        <Helmet>
++          <title>{title}</title>
++          <meta name='robots' content='noindex' />
++        </Helmet>
++      </Column>
++    );
++  }
++
++}
++
++export default withIdentity(connect(mapStateToProps)(injectIntl(BubbleTimeline)));
+diff --git a/app/javascript/flavours/glitch/features/compose/index.tsx b/app/javascript/flavours/glitch/features/compose/index.tsx
+index c1a7186800..f0c92c80d1 100644
+--- a/app/javascript/flavours/glitch/features/compose/index.tsx
++++ b/app/javascript/flavours/glitch/features/compose/index.tsx
+@@ -14,6 +14,7 @@ import { ColumnHeader } from '@/flavours/glitch/components/column_header';
+ import { LoadingIndicator } from '@/flavours/glitch/components/loading_indicator';
+ import { isRedesignEnabled } from '@/flavours/glitch/utils/environment';
+ import elephantUIPlane from '@/images/elephant_ui_plane.svg';
++import BubbleChartIcon from '@/material-icons/400-24px/bubble_chart.svg?react';
+ import EditIcon from '@/material-icons/400-24px/edit_square.svg?react';
+ import PeopleIcon from '@/material-icons/400-24px/group.svg?react';
+ import HomeIcon from '@/material-icons/400-24px/home-fill.svg?react';
+@@ -41,6 +42,10 @@ const messages = defineMessages({
+     id: 'navigation_bar.live_feed_public',
+     defaultMessage: 'Live feed (public)',
+   },
++  live_feed_bubble: {
++    id: 'navigation_bar.live_feed_bubble',
++    defaultMessage: 'Live feed (bubble)',
++  },
+   live_feed_local: {
+     id: 'navigation_bar.live_feed_local',
+     defaultMessage: 'Live feed (local)',
+@@ -181,6 +186,16 @@ const Compose: React.FC<{ multiColumn: boolean }> = ({ multiColumn }) => {
+               <Icon id='users' icon={PeopleIcon} />
+             </Link>
+           )}
++          {!columns.some((column) => column.get('id') === 'BUBBLE') && (
++            <Link
++              to='/public/bubble'
++              className='drawer__tab'
++              title={intl.formatMessage(messages.live_feed_bubble)}
++              aria-label={intl.formatMessage(messages.live_feed_bubble)}
++            >
++              <Icon id='users' icon={BubbleChartIcon} />
++            </Link>
++          )}
+           {!columns.some((column) => column.get('id') === 'PUBLIC') && (
+             <Link
+               to='/public'
+diff --git a/app/javascript/flavours/glitch/features/firehose/index.jsx b/app/javascript/flavours/glitch/features/firehose/index.jsx
+index bff57892db..ab87d13981 100644
+--- a/app/javascript/flavours/glitch/features/firehose/index.jsx
++++ b/app/javascript/flavours/glitch/features/firehose/index.jsx
+@@ -10,13 +10,13 @@ import { useIdentity } from '@/flavours/glitch/identity_context';
+ import PublicIcon from '@/material-icons/400-24px/public.svg?react';
+ import { addColumn } from 'flavours/glitch/actions/columns';
+ import { changeSetting } from 'flavours/glitch/actions/settings';
+-import { connectPublicStream, connectCommunityStream } from 'flavours/glitch/actions/streaming';
+-import { expandPublicTimeline, expandCommunityTimeline } from 'flavours/glitch/actions/timelines';
++import { connectPublicStream, connectCommunityStream, connectBubbleStream } from 'flavours/glitch/actions/streaming';
++import { expandPublicTimeline, expandCommunityTimeline, expandBubbleTimeline } from 'flavours/glitch/actions/timelines';
+ import { Column } from '@/flavours/glitch/components/column';
+ import { ColumnHeader as LegacyColumnHeader } from '@/flavours/glitch/components/column/header';
+ import { DismissableBanner } from 'flavours/glitch/components/dismissable_banner';
+ import SettingText from 'flavours/glitch/components/setting_text';
+-import { localLiveFeedAccess, remoteLiveFeedAccess, domain } from 'flavours/glitch/initial_state';
++import { localLiveFeedAccess, bubbleLiveFeedAccess, remoteLiveFeedAccess, domain } from 'flavours/glitch/initial_state';
+ import { canViewFeed } from 'flavours/glitch/permissions';
+ import { useAppDispatch, useAppSelector } from 'flavours/glitch/store';
+ 
+@@ -106,6 +106,9 @@ const Firehose = ({ feedType, multiColumn }) => {
+       case 'public':
+         dispatch(addColumn('PUBLIC', { other: { onlyMedia, allowLocalOnly }, regex: { body: regex }  }));
+         break;
++      case 'bubble':
++        dispatch(addColumn('BUBBLE', { other: { onlyMedia }, regex: { body: regex } }));
++        break;
+       case 'public:remote':
+         dispatch(addColumn('REMOTE', { other: { onlyMedia, onlyRemote: true }, regex: { body: regex }  }));
+         break;
+@@ -120,6 +123,9 @@ const Firehose = ({ feedType, multiColumn }) => {
+       case 'community':
+         dispatch(expandCommunityTimeline({ maxId, onlyMedia }));
+         break;
++      case 'bubble':
++        dispatch(expandBubbleTimeline({ maxId, onlyMedia }));
++        break;
+       case 'public':
+         dispatch(expandPublicTimeline({ maxId, onlyMedia, allowLocalOnly }));
+         break;
+@@ -141,6 +147,12 @@ const Firehose = ({ feedType, multiColumn }) => {
+         disconnect = dispatch(connectCommunityStream({ onlyMedia }));
+       }
+       break;
++    case 'bubble':
++      dispatch(expandBubbleTimeline({ onlyMedia }));
++      if (signedIn) {
++        disconnect = dispatch(connectBubbleStream({ onlyMedia }));
++      }
++      break;
+     case 'public':
+       dispatch(expandPublicTimeline({ onlyMedia, allowLocalOnly }));
+       if (signedIn) {
+@@ -158,37 +170,60 @@ const Firehose = ({ feedType, multiColumn }) => {
+     return () => disconnect?.();
+   }, [dispatch, signedIn, feedType, onlyMedia, allowLocalOnly]);
+ 
+-  const prependBanner = feedType === 'community' ? (
+-    <DismissableBanner id='community_timeline'>
++  let prependBanner;
++  let emptyMessage;
++
++  if (feedType === 'community') {
++    prependBanner = (
++      <DismissableBanner id='community_timeline'>
++        <FormattedMessage
++          id='dismissable_banner.community_timeline'
++          defaultMessage='These are the most recent public posts from people whose accounts are hosted by {domain}.'
++          values={{ domain }}
++        />
++      </DismissableBanner>
++    );
++    emptyMessage = (
+       <FormattedMessage
+-        id='dismissable_banner.community_timeline'
+-        defaultMessage='These are the most recent public posts from people whose accounts are hosted by {domain}.'
+-        values={{ domain }}
++        id='empty_column.community'
++        defaultMessage='The local timeline is empty. Write something publicly to get the ball rolling!'
+       />
+-    </DismissableBanner>
+-  ) : (
+-    <DismissableBanner id='public_timeline'>
++    );
++  } else if (feedType === 'bubble') {
++    prependBanner = (
++      <DismissableBanner id='bubble_timeline'>
++        <FormattedMessage
++          id='dismissable_banner.bubble_timeline'
++          defaultMessage='These are the most recent public posts from people on the fediverse whose accounts are on other servers selected by {domain}.'
++          values={{ domain }}
++        />
++      </DismissableBanner>
++    );
++    emptyMessage = (
+       <FormattedMessage
+-        id='dismissable_banner.public_timeline'
+-        defaultMessage='These are the most recent public posts from people on the fediverse that people on {domain} follow.'
+-        values={{ domain }}
++        id='empty_column.bubble'
++        defaultMessage='The bubble timeline is currently empty, but something might show up here soon!'
+       />
+-    </DismissableBanner>
+-  );
+-
+-  const emptyMessage = feedType === 'community' ? (
+-    <FormattedMessage
+-      id='empty_column.community'
+-      defaultMessage='The local timeline is empty. Write something publicly to get the ball rolling!'
+-    />
+-  ) : (
+-    <FormattedMessage
+-      id='empty_column.public'
+-      defaultMessage='There is nothing here! Write something publicly, or manually follow users from other servers to fill it up'
+-    />
+-  );
++    );
++  } else {
++    prependBanner = (
++      <DismissableBanner id='public_timeline'>
++        <FormattedMessage
++          id='dismissable_banner.public_timeline'
++          defaultMessage='These are the most recent public posts from people on the fediverse that people on {domain} follow.'
++          values={{ domain }}
++        />
++      </DismissableBanner>
++    );
++    emptyMessage = (
++      <FormattedMessage
++        id='empty_column.public'
++        defaultMessage='There is nothing here! Write something publicly, or manually follow users from other servers to fill it up'
++      />
++    );
++  }
+ 
+-  const canViewSelectedFeed = canViewFeed(signedIn, permissions, feedType === 'community' ? localLiveFeedAccess : remoteLiveFeedAccess);
++  const canViewSelectedFeed = canViewFeed(signedIn, permissions, feedType === 'community' ? localLiveFeedAccess : feedType === 'bubble' ? bubbleLiveFeedAccess : remoteLiveFeedAccess);
+ 
+   const disabledTimelineMessage = (
+     <FormattedMessage
+@@ -198,10 +233,12 @@ const Firehose = ({ feedType, multiColumn }) => {
+   );
+ 
+   const canViewLocalFeed = canViewFeed(signedIn, permissions, localLiveFeedAccess);
++  const canViewBubbleFeed = canViewFeed(signedIn, permissions, bubbleLiveFeedAccess);
+   const canViewRemoteFeed = canViewFeed(signedIn, permissions, remoteLiveFeedAccess);
+ 
+   let title;
+-  if (canViewLocalFeed && canViewRemoteFeed) {
++
++  if ((canViewLocalFeed + canViewBubbleFeed + canViewRemoteFeed) > 1) {
+     title = messages.title;
+   } else if (canViewLocalFeed) {
+     title = messages.title_local;
+@@ -210,7 +247,7 @@ const Firehose = ({ feedType, multiColumn }) => {
+   }
+ 
+   if (isRedesignEnabled()) {
+-    const canOnlyViewSingleFeed = canViewLocalFeed !== canViewRemoteFeed;
++    const canOnlyViewSingleFeed = (canViewLocalFeed + canViewBubbleFeed + canViewRemoteFeed) === 1;
+ 
+     title = canOnlyViewSingleFeed
+       ? intl.formatMessage(messages.title_singular_redesign)
+@@ -244,19 +281,31 @@ const Firehose = ({ feedType, multiColumn }) => {
+         </LegacyColumnHeader>
+       )}
+ 
+-      {(canViewFeed(signedIn, permissions, localLiveFeedAccess) && canViewFeed(signedIn, permissions, remoteLiveFeedAccess)) && (
++      {((canViewFeed(signedIn, permissions, localLiveFeedAccess) + canViewFeed(signedIn, permissions, bubbleLiveFeedAccess) + canViewFeed(signedIn, permissions, remoteLiveFeedAccess)) > 1) && (
+         <div className='account__section-headline'>
+-          <NavLink exact to='/public/local'>
+-            <FormattedMessage tagName='div' id='firehose.local' defaultMessage='This server' />
+-          </NavLink>
+-
+-          <NavLink exact to='/public/remote'>
+-            <FormattedMessage tagName='div' id='firehose.remote' defaultMessage='Other servers' />
+-          </NavLink>
+-
+-          <NavLink exact to='/public'>
+-            <FormattedMessage tagName='div' id='firehose.all' defaultMessage='All' />
+-          </NavLink>
++          {(signedIn || localLiveFeedAccess === 'public') && (
++            <NavLink exact to='/public/local'>
++              <FormattedMessage tagName='div' id='firehose.local' defaultMessage='This server' />
++            </NavLink>
++          )}
++
++          {(signedIn || bubbleLiveFeedAccess === 'public') && (
++            <NavLink exact to='/public/bubble'>
++              <FormattedMessage tagName='div' id='firehose.bubble' defaultMessage='Bubble servers' />
++            </NavLink>
++          )}
++
++          {(signedIn || remoteLiveFeedAccess === 'public') && (
++            <NavLink exact to='/public/remote'>
++              <FormattedMessage tagName='div' id='firehose.remote' defaultMessage='Other servers' />
++            </NavLink>
++          )}
++
++          {(signedIn || (localLiveFeedAccess === 'public' && bubbleLiveFeedAccess === 'public' && remoteLiveFeedAccess === 'public')) && (
++            <NavLink exact to='/public'>
++              <FormattedMessage tagName='div' id='firehose.all' defaultMessage='All' />
++            </NavLink>
++          )}
+         </div>
+       )}
+ 
+diff --git a/app/javascript/flavours/glitch/features/hashtag_timeline/index.jsx b/app/javascript/flavours/glitch/features/hashtag_timeline/index.jsx
+index 5be86ba4c2..32a5291727 100644
+--- a/app/javascript/flavours/glitch/features/hashtag_timeline/index.jsx
++++ b/app/javascript/flavours/glitch/features/hashtag_timeline/index.jsx
+@@ -46,7 +46,9 @@ class HashtagTimeline extends PureComponent {
+     columnId: PropTypes.string,
+     dispatch: PropTypes.func.isRequired,
+     hasUnread: PropTypes.bool,
++    hasFeedAccess: PropTypes.bool,
+     multiColumn: PropTypes.bool,
++    local: PropTypes.bool,
+   };
+ 
+   handlePin = () => {
+diff --git a/app/javascript/flavours/glitch/features/navigation_panel/index.tsx b/app/javascript/flavours/glitch/features/navigation_panel/index.tsx
+index f4bc926bd7..8071aaa79b 100644
+--- a/app/javascript/flavours/glitch/features/navigation_panel/index.tsx
++++ b/app/javascript/flavours/glitch/features/navigation_panel/index.tsx
+@@ -48,6 +48,7 @@ import { useBreakpoint } from 'flavours/glitch/features/ui/hooks/useBreakpoint';
+ import { useIdentity } from 'flavours/glitch/identity_context';
+ import {
+   localLiveFeedAccess,
++  bubbleLiveFeedAccess,
+   remoteLiveFeedAccess,
+   trendsEnabled,
+   me,
+@@ -324,6 +325,7 @@ export const NavigationPanel: React.FC<{ multiColumn?: boolean }> = ({
+         )}
+ 
+         {(canViewFeed(signedIn, permissions, localLiveFeedAccess) ||
++          canViewFeed(signedIn, permissions, bubbleLiveFeedAccess) ||
+           canViewFeed(signedIn, permissions, remoteLiveFeedAccess)) && (
+           <li>
+             <ColumnLink
+@@ -331,7 +333,9 @@ export const NavigationPanel: React.FC<{ multiColumn?: boolean }> = ({
+               to={
+                 canViewFeed(signedIn, permissions, localLiveFeedAccess)
+                   ? '/public/local'
+-                  : '/public/remote'
++                  : canViewFeed(signedIn, permissions, bubbleLiveFeedAccess)
++                    ? '/public/bubble'
++                    : '/public/remote'
+               }
+               icon='globe'
+               iconComponent={PublicIcon}
+diff --git a/app/javascript/flavours/glitch/features/ui/components/columns_area/multi_column_content.tsx b/app/javascript/flavours/glitch/features/ui/components/columns_area/multi_column_content.tsx
+index d2f2480576..3363c27f80 100644
+--- a/app/javascript/flavours/glitch/features/ui/components/columns_area/multi_column_content.tsx
++++ b/app/javascript/flavours/glitch/features/ui/components/columns_area/multi_column_content.tsx
+@@ -11,6 +11,7 @@ import {
+   Notifications,
+   HomeTimeline,
+   CommunityTimeline,
++  BubbleTimeline,
+   PublicTimeline,
+   HashtagTimeline,
+   DirectTimeline,
+@@ -31,6 +32,7 @@ const componentMap = {
+   PUBLIC: PublicTimeline,
+   REMOTE: PublicTimeline,
+   COMMUNITY: CommunityTimeline,
++  BUBBLE: BubbleTimeline,
+   HASHTAG: HashtagTimeline,
+   DIRECT: DirectTimeline,
+   FAVOURITES: FavouritedStatuses,
+diff --git a/app/javascript/flavours/glitch/features/ui/index.jsx b/app/javascript/flavours/glitch/features/ui/index.jsx
+index 5f1b960eb5..bbf52d8f5e 100644
+--- a/app/javascript/flavours/glitch/features/ui/index.jsx
++++ b/app/javascript/flavours/glitch/features/ui/index.jsx
+@@ -55,6 +55,7 @@ import {
+   HomeTimeline,
+   Followers,
+   Following,
++  Reactions,
+   Reblogs,
+   Favourites,
+   DirectTimeline,
+@@ -232,6 +233,7 @@ class SwitchingColumnsArea extends PureComponent {
+             <Redirect from='/timelines/public/local' to={redirectWithoutFocusing('/public/local')} exact />
+             <WrappedRoute path='/public' exact component={Firehose} componentParams={{ feedType: 'public' }} content={children} />
+             <WrappedRoute path='/public/local' exact component={Firehose} componentParams={{ feedType: 'community' }} content={children} />
++            <WrappedRoute path='/public/bubble' exact component={Firehose} componentParams={{ feedType: 'bubble' }} content={children} />
+             <WrappedRoute path='/public/remote' exact component={Firehose} componentParams={{ feedType: 'public:remote' }} content={children} />
+             <WrappedRoute path={['/conversations', '/timelines/direct']} component={DirectTimeline} content={children} />
+             <WrappedRoute path='/tags/:id' component={HashtagTimeline} content={children} />
+@@ -268,6 +270,7 @@ class SwitchingColumnsArea extends PureComponent {
+             <WrappedRoute path={['/accounts/:id/following', '/users/:acct/following', '/@:acct/following']} component={Following} content={children} />
+             <WrappedRoute path={['/@:acct/media', '/accounts/:id/media']} component={AccountGallery} content={children} />
+             <WrappedRoute path='/@:acct/:statusId' exact component={Status} content={children} />
++            <WrappedRoute path='/@:acct/:statusId/reactions' component={Reactions} content={children} />
+             <WrappedRoute path='/@:acct/:statusId/reblogs' component={Reblogs} content={children} />
+             <WrappedRoute path='/@:acct/:statusId/favourites' component={Favourites} content={children} />
+             <WrappedRoute path='/@:acct/:statusId/quotes' component={Quotes} content={children} />
+diff --git a/app/javascript/flavours/glitch/reducers/server.ts b/app/javascript/flavours/glitch/reducers/server.ts
+index 3c5ca90e5f..105935a1e7 100644
+--- a/app/javascript/flavours/glitch/reducers/server.ts
++++ b/app/javascript/flavours/glitch/reducers/server.ts
+@@ -5,6 +5,7 @@ import {
+   fetchServerTranslationLanguages,
+   fetchExtendedDescription,
+   fetchDomainBlocks,
++  fetchBubbleDomains,
+ } from 'flavours/glitch/actions/server';
+ import type {
+   Server,
+@@ -38,6 +39,12 @@ interface State {
+     isAvailable: boolean;
+     items: DomainBlock[];
+   };
++
++  bubbleDomains: {
++    isLoading: boolean;
++    isAvailable: boolean;
++    items: string[];
++  };
+ }
+ 
+ const initialState: State = {
+@@ -61,6 +68,12 @@ const initialState: State = {
+     isAvailable: true,
+     items: [],
+   },
++
++  bubbleDomains: {
++    isLoading: false,
++    isAvailable: true,
++    items: [],
++  },
+ };
+ 
+ export const serverReducer = createReducer(initialState, (builder) => {
+@@ -124,4 +137,19 @@ export const serverReducer = createReducer(initialState, (builder) => {
+     state.domainBlocks.isLoading = false;
+     state.domainBlocks.isAvailable = false;
+   });
++
++  builder.addCase(fetchBubbleDomains.pending, (state) => {
++    state.bubbleDomains.isLoading = true;
++  });
++
++  builder.addCase(fetchBubbleDomains.fulfilled, (state, action) => {
++    state.bubbleDomains.items = action.payload;
++    state.bubbleDomains.isLoading = false;
++    state.bubbleDomains.isAvailable = true;
++  });
++
++  builder.addCase(fetchBubbleDomains.rejected, (state) => {
++    state.bubbleDomains.isLoading = false;
++    state.bubbleDomains.isAvailable = false;
++  });
+ });
+diff --git a/app/javascript/mastodon/features/hashtag_timeline/index.jsx b/app/javascript/mastodon/features/hashtag_timeline/index.jsx
+index b967fc89c9..0f53e2ff6d 100644
+--- a/app/javascript/mastodon/features/hashtag_timeline/index.jsx
++++ b/app/javascript/mastodon/features/hashtag_timeline/index.jsx
+@@ -46,7 +46,9 @@ class HashtagTimeline extends PureComponent {
+     columnId: PropTypes.string,
+     dispatch: PropTypes.func.isRequired,
+     hasUnread: PropTypes.bool,
++    hasFeedAccess: PropTypes.bool,
+     multiColumn: PropTypes.bool,
++    local: PropTypes.bool,
+   };
+ 
+   handlePin = () => {
+diff --git a/app/javascript/material-icons/400-24px/bubble_chart.svg b/app/javascript/material-icons/400-24px/bubble_chart.svg
+new file mode 100644
+index 0000000000..6a5b486862
+--- /dev/null
++++ b/app/javascript/material-icons/400-24px/bubble_chart.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M580-120q-50 0-85-35t-35-85q0-50 35-85t85-35q50 0 85 35t35 85q0 50-35 85t-85 35Zm0-80q17 0 28.5-11.5T620-240q0-17-11.5-28.5T580-280q-17 0-28.5 11.5T540-240q0 17 11.5 28.5T580-200Zm80-200q-92 0-156-64t-64-156q0-92 64-156t156-64q92 0 156 64t64 156q0 92-64 156t-156 64Zm0-80q59 0 99.5-40.5T800-620q0-59-40.5-99.5T660-760q-59 0-99.5 40.5T520-620q0 59 40.5 99.5T660-480ZM280-240q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47Zm0-80q33 0 56.5-23.5T360-400q0-33-23.5-56.5T280-480q-33 0-56.5 23.5T200-400q0 33 23.5 56.5T280-320Zm300 80Zm80-380ZM280-400Z"/></svg>
+\ No newline at end of file
+diff --git a/app/models/account.rb b/app/models/account.rb
+index ab4d893a13..e099904c8f 100644
+--- a/app/models/account.rb
++++ b/app/models/account.rb
+@@ -162,7 +162,13 @@ class Account < ApplicationRecord
+   scope :by_recent_activity, -> { left_joins(:user, :account_stat).order(coalesced_activity_timestamps.desc).order(id: :desc) }
+   scope :by_domain_and_subdomains, ->(domain) { where(domain: Instance.by_domain_and_subdomains(domain).select(:domain)) }
+   scope :not_excluded_by_account, ->(account) { where.not(id: account.excluded_from_timeline_account_ids) }
+-  scope :not_domain_blocked_by_account, ->(account) { where(arel_table[:domain].eq(nil).or(arel_table[:domain].not_in(account.excluded_from_timeline_domains))) }
++  scope :not_domain_blocked_by_account, lambda { |account, bubble_only = false|
++    if bubble_only
++      where(arel_table[:domain].in(BubbleDomain.bubble_domains - account.excluded_from_timeline_domains))
++    else
++      where(arel_table[:domain].eq(nil).or(arel_table[:domain].not_in(account.excluded_from_timeline_domains)))
++    end
++  }
+   scope :dormant, -> { joins(:account_stat).merge(AccountStat.without_recent_activity) }
+   scope :with_username, ->(value) { value.is_a?(Array) ? where(arel_table[:username].lower.in(value.map { |x| x.to_s.downcase })) : where(arel_table[:username].lower.eq(value.to_s.downcase)) }
+   scope :with_domain, ->(value) { where arel_table[:domain].lower.eq(value&.to_s&.downcase) }
+diff --git a/app/models/bubble_domain.rb b/app/models/bubble_domain.rb
+new file mode 100644
+index 0000000000..81dbbd10b3
+--- /dev/null
++++ b/app/models/bubble_domain.rb
+@@ -0,0 +1,41 @@
++# frozen_string_literal: true
++
++# == Schema Information
++#
++# Table name: bubble_domains
++#
++#  id         :bigint(8)        not null, primary key
++#  domain     :string           default(""), not null
++#  created_at :datetime         not null
++#  updated_at :datetime         not null
++#
++
++class BubbleDomain < ApplicationRecord
++  include Paginable
++  include DomainNormalizable
++  include DomainMaterializable
++
++  validates :domain, presence: true, uniqueness: true, domain: true
++
++  def to_log_human_identifier
++    domain
++  end
++
++  class << self
++    def in_bubble?(domain)
++      !rule_for(domain).nil?
++    end
++
++    def bubble_domains
++      pluck(:domain)
++    end
++
++    def rule_for(domain)
++      return if domain.blank?
++
++      uri = Addressable::URI.new.tap { |u| u.host = domain.strip.delete('/') }
++
++      find_by(domain: uri.normalized_host)
++    end
++  end
++end
+diff --git a/app/models/form/admin_settings.rb b/app/models/form/admin_settings.rb
+index b279e40e98..241748b009 100644
+--- a/app/models/form/admin_settings.rb
++++ b/app/models/form/admin_settings.rb
+@@ -27,13 +27,16 @@ class Form::AdminSettings
+     thumbnail
+     thumbnail_description
+     mascot
+-    show_reblogs_in_public_timelines
+-    show_replies_in_public_timelines
++    show_reblogs_in_local_timelines
++    show_replies_in_local_timelines
++    show_reblogs_in_federated_timelines
++    show_replies_in_federated_timelines
+     trends
+     trendable_by_default
+     trending_status_cw
+     show_domain_blocks
+     show_domain_blocks_rationale
++    show_bubble_domains
+     allow_referrer_origin
+     noindex
+     outgoing_spoilers
+@@ -46,10 +49,14 @@ class Form::AdminSettings
+     authorized_fetch
+     app_icon
+     favicon
++    reject_pattern
++    reject_blurhash
+     min_age
+     local_live_feed_access
++    bubble_live_feed_access
+     remote_live_feed_access
+     local_topic_feed_access
++    bubble_topic_feed_access
+     remote_topic_feed_access
+     landing_page
+     wrapstodon
+@@ -73,8 +80,10 @@ class Form::AdminSettings
+     preview_sensitive_media
+     profile_directory
+     hide_followers_count
+-    show_reblogs_in_public_timelines
+-    show_replies_in_public_timelines
++    show_reblogs_in_local_timelines
++    show_replies_in_local_timelines
++    show_reblogs_in_federated_timelines
++    show_replies_in_federated_timelines
+     trends
+     trendable_by_default
+     trending_status_cw
+@@ -105,6 +114,7 @@ class Form::AdminSettings
+ 
+   DESCRIPTION_LIMIT = 200
+   DOMAIN_BLOCK_AUDIENCES = %w(disabled users all).freeze
++  BUBBLE_DOMAIN_AUDIENCES = %w(disabled users all).freeze
+   REGISTRATION_MODES = %w(open approved none).freeze
+   FEED_ACCESS_MODES = %w(public authenticated disabled).freeze
+   ALTERNATE_FEED_ACCESS_MODES = %w(public authenticated).freeze
+@@ -119,14 +129,18 @@ class Form::AdminSettings
+   validates :bootstrap_timeline_accounts, existing_username: { multiple: true }, if: -> { defined?(@bootstrap_timeline_accounts) }
+   validates :show_domain_blocks, inclusion: { in: DOMAIN_BLOCK_AUDIENCES }, if: -> { defined?(@show_domain_blocks) }
+   validates :show_domain_blocks_rationale, inclusion: { in: DOMAIN_BLOCK_AUDIENCES }, if: -> { defined?(@show_domain_blocks_rationale) }
++  validates :show_bubble_domains, inclusion: { in: BUBBLE_DOMAIN_AUDIENCES }, if: -> { defined?(@show_bubble_domains) }
+   validates :local_live_feed_access, inclusion: { in: FEED_ACCESS_MODES }, if: -> { defined?(@local_live_feed_access) }
++  validates :bubble_live_feed_access, inclusion: { in: FEED_ACCESS_MODES }, if: -> { defined?(@bubble_live_feed_access) }
+   validates :remote_live_feed_access, inclusion: { in: FEED_ACCESS_MODES }, if: -> { defined?(@remote_live_feed_access) }
+   validates :local_topic_feed_access, inclusion: { in: ALTERNATE_FEED_ACCESS_MODES }, if: -> { defined?(@local_topic_feed_access) }
++  validates :bubble_topic_feed_access, inclusion: { in: FEED_ACCESS_MODES }, if: -> { defined?(@bubble_topic_feed_access) }
+   validates :remote_topic_feed_access, inclusion: { in: FEED_ACCESS_MODES }, if: -> { defined?(@remote_topic_feed_access) }
+   validates :media_cache_retention_period, :content_cache_retention_period, :backups_retention_period, numericality: { only_integer: true }, allow_blank: true, if: -> { defined?(@media_cache_retention_period) || defined?(@content_cache_retention_period) || defined?(@backups_retention_period) }
+   validates :min_age, numericality: { only_integer: true }, allow_blank: true, if: -> { defined?(@min_age) }
+   validates :site_short_description, length: { maximum: DESCRIPTION_LIMIT }, if: -> { defined?(@site_short_description) }
+   validates :thumbnail_description, length: { maximum: DESCRIPTION_LIMIT }, if: -> { defined?(@thumbnail_description) }
++  validates :reject_pattern, regexp_syntax: true, if: -> { defined?(@reject_pattern) }
+   validates :status_page_url, url: true, allow_blank: true
+   validate :validate_site_uploads
+   validates :landing_page, inclusion: { in: LANDING_PAGE }, if: -> { defined?(@landing_page) }
+diff --git a/app/models/link_feed.rb b/app/models/link_feed.rb
+index 4554796cc5..148ab8f600 100644
+--- a/app/models/link_feed.rb
++++ b/app/models/link_feed.rb
+@@ -24,6 +24,7 @@ class LinkFeed < PublicFeed
+     scope.merge!(account_filters_scope) if account?
+     scope.merge!(language_scope) if account&.chosen_languages.present?
+     scope.merge!(local_only_scope) if local_only?
++    scope.merge!(bubble_only_scope) if bubble_only?
+     scope.merge!(remote_only_scope) if remote_only?
+ 
+     scope.to_a_paginated_by_id(limit, max_id: max_id, since_id: since_id, min_id: min_id)
+@@ -35,6 +36,10 @@ class LinkFeed < PublicFeed
+     Setting.local_topic_feed_access
+   end
+ 
++  def bubble_feed_setting
++    Setting.bubble_topic_feed_access
++  end
++
+   def remote_feed_setting
+     Setting.remote_topic_feed_access
+   end
+diff --git a/app/models/public_feed.rb b/app/models/public_feed.rb
+index a4b2919ef8..00ad3ce215 100644
+--- a/app/models/public_feed.rb
++++ b/app/models/public_feed.rb
+@@ -6,6 +6,7 @@ class PublicFeed
+   # @option [Boolean] :with_replies
+   # @option [Boolean] :with_reblogs
+   # @option [Boolean] :local
++  # @option [Boolean] :bubble
+   # @option [Boolean] :remote
+   # @option [Boolean] :only_media
+   # @option [Boolean] :allow_local_only
+@@ -28,6 +29,7 @@ class PublicFeed
+     scope.merge!(without_replies_scope) unless with_replies?
+     scope.merge!(without_reblogs_scope) unless with_reblogs?
+     scope.merge!(local_only_scope) if local_only?
++    scope.merge!(bubble_only_scope) if bubble_only?
+     scope.merge!(remote_only_scope) if remote_only?
+     scope.merge!(account_filters_scope) if account?
+     scope.merge!(media_only_scope) if media_only?
+@@ -45,7 +47,7 @@ class PublicFeed
+   end
+ 
+   def incompatible_feed_settings?
+-    (local_only? && !user_has_access_to_feed?(local_feed_setting)) || (remote_only? && !user_has_access_to_feed?(remote_feed_setting))
++    (local_only? && !user_has_access_to_feed?(local_feed_setting)) || (bubble_only? && !user_has_access_to_feed?(bubble_feed_setting)) || (remote_only? && !user_has_access_to_feed?(remote_feed_setting))
+   end
+ 
+   def user_has_access_to_feed?(setting)
+@@ -71,16 +73,24 @@ class PublicFeed
+     Setting.local_live_feed_access
+   end
+ 
++  def bubble_feed_setting
++    Setting.bubble_live_feed_access
++  end
++
+   def remote_feed_setting
+     Setting.remote_live_feed_access
+   end
+ 
+   def local_only?
+-    (options[:local] && !options[:remote]) || !user_has_access_to_feed?(remote_feed_setting)
++    (options[:local] && !options[:remote] && !options[:bubble]) || (!user_has_access_to_feed?(remote_feed_setting) || !user_has_access_to_feed?(bubble_feed_setting))
++  end
++
++  def bubble_only?
++    (options[:bubble] && !options[:local] && !options[:remote]) || (!user_has_access_to_feed?(local_feed_setting) && !user_has_access_to_feed?(remote_feed_setting))
+   end
+ 
+   def remote_only?
+-    (options[:remote] && !options[:local]) || !user_has_access_to_feed?(local_feed_setting)
++    (options[:remote] && !options[:local] && !options[:bubble]) || !user_has_access_to_feed?(local_feed_setting)
+   end
+ 
+   def account?
+@@ -103,6 +113,10 @@ class PublicFeed
+     Status.local
+   end
+ 
++  def bubble_only_scope
++    Status.bubble
++  end
++
+   def remote_only_scope
+     Status.remote
+   end
+@@ -129,7 +143,7 @@ class PublicFeed
+ 
+   def account_filters_scope
+     Status.not_excluded_by_account(account).tap do |scope|
+-      scope.merge!(Status.not_domain_blocked_by_account(account)) unless local_only?
++      scope.merge!(Status.not_domain_blocked_by_account(account, bubble_only?)) unless local_only?
+     end
+   end
+ end
+diff --git a/app/models/tag_feed.rb b/app/models/tag_feed.rb
+index f9ed437994..a837dce9ea 100644
+--- a/app/models/tag_feed.rb
++++ b/app/models/tag_feed.rb
+@@ -10,6 +10,7 @@ class TagFeed < PublicFeed
+   # @option [Enumerable<String>] :all
+   # @option [Enumerable<String>] :none
+   # @option [Boolean] :local
++  # @option [Boolean] :bubble
+   # @option [Boolean] :remote
+   # @option [Boolean] :only_media
+   def initialize(tag, account, options = {})
+@@ -32,6 +33,7 @@ class TagFeed < PublicFeed
+     scope.merge!(tagged_with_all_scope)
+     scope.merge!(tagged_with_none_scope)
+     scope.merge!(local_only_scope) if local_only?
++    scope.merge!(bubble_only_scope) if bubble_only?
+     scope.merge!(remote_only_scope) if remote_only?
+     scope.merge!(account_filters_scope) if account?
+     scope.merge!(media_only_scope) if media_only?
+@@ -45,6 +47,10 @@ class TagFeed < PublicFeed
+     Setting.local_topic_feed_access
+   end
+ 
++  def bubble_feed_setting
++    Setting.bubble_topic_feed_access
++  end
++
+   def remote_feed_setting
+     Setting.remote_topic_feed_access
+   end
+diff --git a/app/policies/bubble_domain_policy.rb b/app/policies/bubble_domain_policy.rb
+new file mode 100644
+index 0000000000..bcb38a8360
+--- /dev/null
++++ b/app/policies/bubble_domain_policy.rb
+@@ -0,0 +1,7 @@
++# frozen_string_literal: true
++
++class BubbleDomainPolicy < ApplicationPolicy
++  def update?
++    role.can?(:manage_federation)
++  end
++end
+diff --git a/app/services/batched_remove_status_service.rb b/app/services/batched_remove_status_service.rb
+index bac46f9015..4176383116 100644
+--- a/app/services/batched_remove_status_service.rb
++++ b/app/services/batched_remove_status_service.rb
+@@ -25,10 +25,7 @@ class BatchedRemoveStatusService < BaseService
+       associations: [mentions: :account]
+     ).call
+ 
+-    statuses_with_account_conversations.each do |status|
+-      status.unlink_from_conversations!
+-      unpush_from_direct_timelines(status)
+-    end
++    statuses_with_account_conversations.each(&:unlink_from_conversations!)
+ 
+     # We do not batch all deletes into one to avoid having a long-running
+     # transaction lock the database, but we use the delete method instead
+@@ -92,10 +89,12 @@ class BatchedRemoveStatusService < BaseService
+ 
+     pipeline.publish('timeline:public', payload)
+     pipeline.publish(status.local? ? 'timeline:public:local' : 'timeline:public:remote', payload)
++    pipeline.publish('timeline:public:bubble', payload) if status.bubble?
+ 
+     if status.media_attachments.any?
+       pipeline.publish('timeline:public:media', payload)
+       pipeline.publish(status.local? ? 'timeline:public:local:media' : 'timeline:public:remote:media', payload)
++      pipeline.publish('timeline:public:bubble:media', payload) if status.bubble?
+     end
+ 
+     status.tags.map { |tag| tag.name.downcase }.each do |hashtag|
+diff --git a/app/services/fan_out_on_write_service.rb b/app/services/fan_out_on_write_service.rb
+index 25ff3bead2..5f8896c150 100644
+--- a/app/services/fan_out_on_write_service.rb
++++ b/app/services/fan_out_on_write_service.rb
+@@ -146,14 +146,14 @@ class FanOutOnWriteService < BaseService
+   end
+ 
+   def broadcast_to_public_streams!
+-    return if @status.reply? && @status.in_reply_to_account_id != @account.id && !Setting.show_replies_in_public_timelines
+-
+     redis.publish('timeline:public', anonymous_payload)
+     redis.publish(@status.local? ? 'timeline:public:local' : 'timeline:public:remote', anonymous_payload)
++    redis.publish('timeline:public:bubble', anonymous_payload) if @status.bubble?
+ 
+     if @status.with_media?
+       redis.publish('timeline:public:media', anonymous_payload)
+       redis.publish(@status.local? ? 'timeline:public:local:media' : 'timeline:public:remote:media', anonymous_payload)
++      redis.publish('timeline:public:bubble:media', anonymous_payload) if @status.bubble?
+     end
+   end
+ 
+diff --git a/app/services/remove_status_service.rb b/app/services/remove_status_service.rb
+index 2176400d54..dbc684b439 100644
+--- a/app/services/remove_status_service.rb
++++ b/app/services/remove_status_service.rb
+@@ -140,6 +140,7 @@ class RemoveStatusService < BaseService
+ 
+     redis.publish('timeline:public', @payload)
+     redis.publish(@status.local? ? 'timeline:public:local' : 'timeline:public:remote', @payload)
++    redis.publish('timeline:public:bubble', @payload) if @status.bubble?
+   end
+ 
+   def remove_from_media
+@@ -149,6 +150,7 @@ class RemoveStatusService < BaseService
+ 
+     redis.publish('timeline:public:media', @payload)
+     redis.publish(@status.local? ? 'timeline:public:local:media' : 'timeline:public:remote:media', @payload)
++    redis.publish('timeline:public:bubble:media', @payload) if @status.bubble?
+   end
+ 
+   def remove_from_direct
+diff --git a/app/views/admin/bubble_domains/_bubble_domain.html.haml b/app/views/admin/bubble_domains/_bubble_domain.html.haml
+new file mode 100644
+index 0000000000..a2aaa19268
+--- /dev/null
++++ b/app/views/admin/bubble_domains/_bubble_domain.html.haml
+@@ -0,0 +1,5 @@
++%tr
++  %td
++    %samp= bubble_domain.domain
++  %td
++    = table_link_to 'close', t('admin.bubble_domains.delete'), admin_bubble_domain_path(bubble_domain), method: :delete, data: { confirm: t('admin.accounts.are_you_sure') }
+diff --git a/app/views/admin/bubble_domains/index.html.haml b/app/views/admin/bubble_domains/index.html.haml
+new file mode 100644
+index 0000000000..b48dcdc431
+--- /dev/null
++++ b/app/views/admin/bubble_domains/index.html.haml
+@@ -0,0 +1,18 @@
++- content_for :page_title do
++  = t('admin.bubble_domains.title')
++
++.simple_form
++  %p.hint= t('admin.bubble_domains.description_html')
++  = link_to t('admin.bubble_domains.add'), new_admin_bubble_domain_path, class: 'button button--block'
++
++- unless @bubble_domains.empty?
++  %hr.spacer
++
++  .table-wrapper
++    %table.table
++      %thead
++        %tr
++          %th= t('admin.bubble_domains.domain')
++          %th
++      %tbody
++        = render @bubble_domains
+diff --git a/app/views/admin/bubble_domains/new.html.haml b/app/views/admin/bubble_domains/new.html.haml
+new file mode 100644
+index 0000000000..65c18f4f0f
+--- /dev/null
++++ b/app/views/admin/bubble_domains/new.html.haml
+@@ -0,0 +1,11 @@
++- content_for :page_title do
++  = t('.title')
++
++= simple_form_for @bubble_domain, url: admin_bubble_domains_path do |f|
++  = render 'shared/error_messages', object: @bubble_domain
++
++  .field-group
++    = f.input :domain, as: :string, wrapper: :with_label, label: t('admin.bubble_domains.domain')
++
++  .actions
++    = f.button :button, t('.save'), type: :submit
+diff --git a/app/views/admin/settings/about/show.html.haml b/app/views/admin/settings/about/show.html.haml
+index 4e2ebb43ed..924f24fa52 100644
+--- a/app/views/admin/settings/about/show.html.haml
++++ b/app/views/admin/settings/about/show.html.haml
+@@ -37,6 +37,14 @@
+                 item_wrapper_tag: 'li',
+                 label_method: ->(value) { t("admin.settings.domain_blocks.#{value}") },
+                 wrapper: :with_label
++    .fields-row__column.fields-row__column-6.fields-group
++      = f.input :show_bubble_domains,
++                collection_wrapper_tag: 'ul',
++                collection: %i(disabled users all),
++                include_blank: false,
++                item_wrapper_tag: 'li',
++                label_method: ->(value) { t("admin.settings.bubble_domains.#{value}") },
++                wrapper: :with_label
+ 
+   .fields-group
+     = f.input :status_page_url,
+diff --git a/app/views/admin/settings/discovery/show.html.haml b/app/views/admin/settings/discovery/show.html.haml
+index 376c8faea9..1d4cefc188 100644
+--- a/app/views/admin/settings/discovery/show.html.haml
++++ b/app/views/admin/settings/discovery/show.html.haml
+@@ -36,6 +36,13 @@
+                 label_method: ->(mode) { I18n.t("admin.settings.feed_access.modes.#{mode}") },
+                 wrapper: :with_label
+ 
++    .fields-row__column.fields-row__column-6.fields-group
++      = f.input :bubble_live_feed_access,
++                collection: f.object.class::FEED_ACCESS_MODES,
++                include_blank: false,
++                label_method: ->(mode) { I18n.t("admin.settings.feed_access.modes.#{mode}") },
++                wrapper: :with_label
++
+     .fields-row__column.fields-row__column-6.fields-group
+       = f.input :remote_live_feed_access,
+                 collection: f.object.class::FEED_ACCESS_MODES,
+@@ -51,6 +58,13 @@
+                 label_method: ->(mode) { I18n.t("admin.settings.feed_access.modes.#{mode}") },
+                 wrapper: :with_label
+ 
++    .fields-row__column.fields-row__column-6.fields-group
++      = f.input :bubble_topic_feed_access,
++                collection: f.object.class::FEED_ACCESS_MODES,
++                include_blank: false,
++                label_method: ->(mode) { I18n.t("admin.settings.feed_access.modes.#{mode}") },
++                wrapper: :with_label
++
+     .fields-row__column.fields-row__column-6.fields-group
+       = f.input :remote_topic_feed_access,
+                 collection: f.object.class::FEED_ACCESS_MODES,
+diff --git a/config/locales/en.yml b/config/locales/en.yml
+index e40baa3de7..b69f5578dc 100644
+--- a/config/locales/en.yml
++++ b/config/locales/en.yml
+@@ -382,6 +382,16 @@ en:
+       unpublish: Unpublish
+       unpublished_msg: Announcement successfully unpublished!
+       updated_msg: Announcement successfully updated!
++    bubble_domains:
++      add: Add to bubble
++      created_msg: Successfully added domain to bubble
++      delete: Delete
++      description_html: The <strong>bubble timeline</strong> is a public timeline consisting of posts from other servers that you select. <strong>It can help users on your server discover interesting content and new people to talk to</strong> without the noise of the full remote and public timelines.
++      domain: Domain
++      new:
++        save: Save
++        title: Add new bubble domain
++      title: Bubble
+     collections:
+       accounts: Accounts
+       back_to_account: Back to account page
+@@ -1034,6 +1044,10 @@ en:
+           local_feed: Local live feed
+           overview: Overview
+           trends: Trending
++      others:
++        activitypub: ActivityPub
++        preamble: Other settings, including customizing behavior
++        title: Other settings
+       registrations:
+         moderation_recommandation: Please make sure you have an adequate and reactive moderation team before you open registrations to everyone!
+         preamble: Control who can create an account on your server.
+@@ -1044,6 +1058,12 @@ en:
+           none: Nobody can sign up
+           open: Anyone can sign up
+         warning_hint: We recommend using “Approval required for sign up” unless you are confident your moderation team can handle spam and malicious registrations in a timely fashion.
++      reject_blurhash:
++        desc_html: Blurhashes to compare against Create activities' media attachments. Matching activities will be rejected. Separated by newline.
++        title: Reject blurhash
++      reject_pattern:
++        desc_html: Set a regular expression pattern to inspect Create Activity content, and refuse Activity if you match
++        title: Reject Pattern
+       security:
+         authorized_fetch: Require authentication from federated servers
+         authorized_fetch_hint: Decide when remote servers are required to authenticate when fetching content from this server.
+@@ -1417,6 +1437,7 @@ en:
+   applications:
+     created: Application successfully created
+     destroyed: Application successfully deleted
++    invalid_regexp: 'The provided Regexp is invalid: %{message}'
+     logout: Logout
+     regenerate_token: Regenerate access token
+     token_regenerated: Access token successfully regenerated
+@@ -1428,6 +1449,7 @@ en:
+       help_html: If you have issues solving the CAPTCHA, you can get in touch with us through %{email} and we can assist you.
+       hint_html: Just one more thing! We need to confirm you're a human (this is so we can keep the spam out!). Solve the CAPTCHA below and click "Continue".
+       title: Security check
++    change_password: Password
+     confirmations:
+       awaiting_review: Your email address is confirmed! The %{domain} staff is now reviewing your registration. You will receive an email if they approve your account!
+       awaiting_review_title: Your registration is being reviewed
+diff --git a/config/navigation.rb b/config/navigation.rb
+index 64ad99be06..a4202f7f5b 100644
+--- a/config/navigation.rb
++++ b/config/navigation.rb
+@@ -87,6 +87,7 @@ SimpleNavigation::Configuration.run do |navigation|
+       s.item :webhooks, safe_join([material_symbol('inbox'), t('admin.webhooks.title')]), admin_webhooks_path, highlights_on: %r{/admin/webhooks}, if: -> { current_user.can?(:manage_webhooks) }
+       s.item :fasp, safe_join([material_symbol('extension'), t('admin.fasp.title')]), admin_fasp_providers_path, highlights_on: %r{/admin/fasp}, if: -> { current_user.can?(:manage_federation) } if Mastodon::Feature.fasp_enabled?
+       s.item :relays, safe_join([material_symbol('captive_portal'), t('admin.relays.title')]), admin_relays_path, highlights_on: %r{/admin/relays}, if: -> { !limited_federation_mode? && current_user.can?(:manage_federation) }
++      s.item :bubble_domains, safe_join([material_symbol('bubble_chart'), t('admin.bubble_domains.title')]), admin_bubble_domains_path, highlights_on: %r{/admin/bubble_domains}, if: -> { current_user.can?(:manage_federation) }
+     end
+ 
+     n.item :sidekiq, safe_join([material_symbol('diamond'), 'Sidekiq']), sidekiq_path, link_html: { target: 'sidekiq' }, if: -> { current_user.can?(:view_devops) }
+diff --git a/config/routes/admin.rb b/config/routes/admin.rb
+index b3ff7dbbaf..5c1cc034fe 100644
+--- a/config/routes/admin.rb
++++ b/config/routes/admin.rb
+@@ -102,6 +102,8 @@ namespace :admin do
+     end
+   end
+ 
++  resources :bubble_domains, only: [:index, :new, :create, :destroy]
++
+   resources :instances, only: [:index, :show, :destroy], constraints: { id: %r{[^/]+} }, format: 'html' do
+     member do
+       post :clear_delivery_errors
+diff --git a/config/routes/web_app.rb b/config/routes/web_app.rb
+index 333efc434c..4aa7c75bfa 100644
+--- a/config/routes/web_app.rb
++++ b/config/routes/web_app.rb
+@@ -28,6 +28,7 @@
+   /profile/(*any)
+   /public
+   /public/local
++  /public/bubble
+   /public/remote
+   /publish
+   /search
+diff --git a/config/settings.yml b/config/settings.yml
+index 4a6a51d71f..0bc4f7de36 100644
+--- a/config/settings.yml
++++ b/config/settings.yml
+@@ -13,8 +13,10 @@ defaults: &defaults
+   profile_directory: true
+   closed_registrations_message: ''
+   local_live_feed_access: 'authenticated'
++  bubble_live_feed_access: 'authenticated'
+   remote_live_feed_access: 'authenticated'
+   local_topic_feed_access: 'authenticated'
++  bubble_topic_feed_access: 'authenticated'
+   remote_topic_feed_access: 'authenticated'
+   show_staff_badge: true
+   preview_sensitive_media: false
+@@ -25,6 +27,7 @@ defaults: &defaults
+   trends: true
+   trendable_by_default: false
+   trending_status_cw: true
++  visible_reactions: 6
+   hide_followers_count: false
+   disallowed_hashtags: # space separated string or list of hashtags without the hash
+   bootstrap_timeline_accounts: ''
+@@ -35,6 +38,7 @@ defaults: &defaults
+   default_content_type: 'text/plain'
+   show_domain_blocks: 'disabled'
+   show_domain_blocks_rationale: 'disabled'
++  show_bubble_domains: 'users'
+   outgoing_spoilers: ''
+   require_invite_text: false
+   backups_retention_period: 7
+@@ -44,6 +48,8 @@ defaults: &defaults
+   opt_in_server_directory: false
+   opt_in_server_recommendation: false
+   wrapstodon: true
++  reject_pattern: ''
++  reject_blurhash: ''
+ 
+ development:
+   <<: *defaults
+diff --git a/db/migrate/20240114042123_create_bubble_domains.rb b/db/migrate/20240114042123_create_bubble_domains.rb
+new file mode 100644
+index 0000000000..83c87956bf
+--- /dev/null
++++ b/db/migrate/20240114042123_create_bubble_domains.rb
+@@ -0,0 +1,13 @@
++# frozen_string_literal: true
++
++class CreateBubbleDomains < ActiveRecord::Migration[7.1]
++  def change
++    create_table :bubble_domains do |t|
++      t.string :domain, default: '', null: false
++
++      t.timestamps
++    end
++
++    add_index :bubble_domains, :domain, name: :index_bubble_domains_on_domain, unique: true
++  end
++end
+diff --git a/db/migrate/20251018223804_add_bubble_timeline_preview_setting.rb b/db/migrate/20251018223804_add_bubble_timeline_preview_setting.rb
+new file mode 100644
+index 0000000000..1acc2f50ec
+--- /dev/null
++++ b/db/migrate/20251018223804_add_bubble_timeline_preview_setting.rb
+@@ -0,0 +1,19 @@
++# frozen_string_literal: true
++
++class AddBubbleTimelinePreviewSetting < ActiveRecord::Migration[8.0]
++  class Setting < ApplicationRecord; end
++
++  def up
++    setting = Setting.find_by(var: 'remote_live_feed_access')
++    return unless setting.present? && setting.attributes['value'].present?
++
++    value = YAML.safe_load(setting.attributes['value'], permitted_classes: [ActiveSupport::HashWithIndifferentAccess, Symbol])
++
++    Setting.upsert({
++      var: 'bubble_live_feed_access',
++      value: value,
++    })
++  end
++
++  def down; end
++end
+diff --git a/db/migrate/20251024193240_add_bubble_timeline_topic_preview_setting.rb b/db/migrate/20251024193240_add_bubble_timeline_topic_preview_setting.rb
+new file mode 100644
+index 0000000000..79486c2ae0
+--- /dev/null
++++ b/db/migrate/20251024193240_add_bubble_timeline_topic_preview_setting.rb
+@@ -0,0 +1,19 @@
++# frozen_string_literal: true
++
++class AddBubbleTimelineTopicPreviewSetting < ActiveRecord::Migration[8.0]
++  class Setting < ApplicationRecord; end
++
++  def up
++    setting = Setting.find_by(var: 'bubble_live_feed_access')
++    return unless setting.present? && setting.attributes['value'].present?
++
++    value = YAML.safe_load(setting.attributes['value'], permitted_classes: [ActiveSupport::HashWithIndifferentAccess, Symbol])
++
++    Setting.upsert({
++      var: 'bubble_topic_feed_access',
++      value: value,
++    })
++  end
++
++  def down; end
++end
+diff --git a/db/schema.rb b/db/schema.rb
+index 71449f6558..c5368db4e9 100644
+--- a/db/schema.rb
++++ b/db/schema.rb
+@@ -343,6 +343,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_094651) do
+     t.index ["status_id"], name: "index_bookmarks_on_status_id"
+   end
+ 
++  create_table "bubble_domains", force: :cascade do |t|
++    t.string "domain", default: "", null: false
++    t.datetime "created_at", null: false
++    t.datetime "updated_at", null: false
++    t.index ["domain"], name: "index_bubble_domains_on_domain", unique: true
++  end
++
+   create_table "bulk_import_rows", force: :cascade do |t|
+     t.bigint "bulk_import_id", null: false
+     t.datetime "created_at", null: false
+@@ -1237,10 +1244,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_094651) do
+     t.index ["status_id"], name: "index_status_pins_on_status_id"
+   end
+ 
++  create_table "status_reactions", force: :cascade do |t|
++    t.bigint "account_id", null: false
++    t.bigint "status_id", null: false
++    t.string "name", default: "", null: false
++    t.bigint "custom_emoji_id"
++    t.datetime "created_at", null: false
++    t.datetime "updated_at", null: false
++    t.index ["account_id", "status_id", "name"], name: "index_status_reactions_on_account_id_and_status_id", unique: true
++    t.index ["custom_emoji_id"], name: "index_status_reactions_on_custom_emoji_id"
++    t.index ["status_id"], name: "index_status_reactions_on_status_id"
++  end
++
+   create_table "status_stats", force: :cascade do |t|
+     t.datetime "created_at", precision: nil, null: false
+     t.bigint "favourites_count", default: 0, null: false
+     t.bigint "quotes_count", default: 0, null: false
++    t.bigint "reactions_count", default: 0, null: false
+     t.bigint "reblogs_count", default: 0, null: false
+     t.bigint "replies_count", default: 0, null: false
+     t.bigint "status_id", null: false
+@@ -1637,6 +1657,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_094651) do
+   add_foreign_key "status_edits", "statuses", on_delete: :cascade
+   add_foreign_key "status_pins", "accounts", name: "fk_d4cb435b62", on_delete: :cascade
+   add_foreign_key "status_pins", "statuses", on_delete: :cascade
++  add_foreign_key "status_reactions", "accounts", on_delete: :cascade
++  add_foreign_key "status_reactions", "custom_emojis", on_delete: :cascade
++  add_foreign_key "status_reactions", "statuses", on_delete: :cascade
+   add_foreign_key "status_stats", "statuses", on_delete: :cascade
+   add_foreign_key "status_trends", "accounts", on_delete: :cascade
+   add_foreign_key "status_trends", "statuses", on_delete: :cascade
+diff --git a/lib/mastodon/cli/bubble_domains.rb b/lib/mastodon/cli/bubble_domains.rb
+new file mode 100644
+index 0000000000..f3f042ba23
+--- /dev/null
++++ b/lib/mastodon/cli/bubble_domains.rb
+@@ -0,0 +1,81 @@
++# frozen_string_literal: true
++
++require 'concurrent'
++require_relative 'base'
++
++module Mastodon::CLI
++  class BubbleDomains < Base
++    desc 'list', 'List domains in the bubble'
++    def list
++      BubbleDomain.find_each do |entry|
++        say(entry.domain.to_s, :white)
++      end
++    end
++
++    desc 'add [DOMAIN...]', 'Add domains to the bubble'
++    def add(*domains)
++      fail_with_message 'No domain(s) given' if domains.empty?
++
++      domains = domains.map { |domain| TagManager.instance.normalize_domain(domain) }
++
++      skipped = 0
++      processed = 0
++
++      domains.each do |domain|
++        if BubbleDomain.exists?(domain: domain)
++          say("#{domain} is already in the bubble.", :yellow)
++          skipped += 1
++          next
++        end
++
++        bubble_domain = BubbleDomain.new(domain: domain)
++        bubble_domain.save!
++        processed += 1
++      end
++
++      say("Added #{processed}, skipped #{skipped}", color(processed, 0))
++    end
++
++    desc 'remove DOMAIN...', 'Remove domain from the bubble'
++    def remove(*domains)
++      fail_with_message 'No domain(s) given' if domains.empty?
++
++      skipped = 0
++      processed = 0
++      failed = 0
++
++      domains.each do |domain|
++        entry = BubbleDomain.find_by(domain: domain)
++
++        if entry.nil?
++          say("#{domain} is not in the bubble.", :yellow)
++          skipped += 1
++          next
++        end
++
++        result = entry.destroy
++
++        if result
++          processed += 1
++        else
++          say("#{domain} could not be removed.", :red)
++          failed += 1
++        end
++      end
++
++      say("Removed #{processed}, skipped #{skipped}, failed #{failed}", color(processed, failed))
++    end
++
++    private
++
++    def color(processed, failed)
++      if !processed.zero? && failed.zero?
++        :green
++      elsif failed.zero?
++        :yellow
++      else
++        :red
++      end
++    end
++  end
++end
+diff --git a/lib/mastodon/cli/main.rb b/lib/mastodon/cli/main.rb
+index ef40b81f33..7c49a6a228 100644
+--- a/lib/mastodon/cli/main.rb
++++ b/lib/mastodon/cli/main.rb
+@@ -3,6 +3,7 @@
+ require_relative 'base'
+ 
+ require_relative 'accounts'
++require_relative 'bubble_domains'
+ require_relative 'cache'
+ require_relative 'canonical_email_blocks'
+ require_relative 'domains'
+@@ -63,6 +64,9 @@ module Mastodon::CLI
+     desc 'canonical_email_blocks SUBCOMMAND ...ARGS', 'Manage canonical e-mail blocks'
+     subcommand 'canonical_email_blocks', CanonicalEmailBlocks
+ 
++    desc 'bubble_domains SUBCOMMAND ...ARGS', 'Manage bubble domains'
++    subcommand 'bubble_domains', BubbleDomains
++
+     desc 'maintenance SUBCOMMAND ...ARGS', 'Various maintenance utilities'
+     subcommand 'maintenance', Maintenance
+ 
+diff --git a/spec/fabricators/bubble_domain_fabricator.rb b/spec/fabricators/bubble_domain_fabricator.rb
+new file mode 100644
+index 0000000000..64c4d6c531
+--- /dev/null
++++ b/spec/fabricators/bubble_domain_fabricator.rb
+@@ -0,0 +1,5 @@
++# frozen_string_literal: true
++
++Fabricator(:bubble_domain) do
++  domain { sequence(:domain) { |i| "example#{i}.com" } }
++end
+diff --git a/spec/lib/mastodon/cli/bubble_domains_spec.rb b/spec/lib/mastodon/cli/bubble_domains_spec.rb
+new file mode 100644
+index 0000000000..4b818db3f1
+--- /dev/null
++++ b/spec/lib/mastodon/cli/bubble_domains_spec.rb
+@@ -0,0 +1,100 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++require 'mastodon/cli/bubble_domains'
++
++RSpec.describe Mastodon::CLI::BubbleDomains do
++  subject { cli.invoke(action, arguments, options) }
++
++  let(:cli) { described_class.new }
++  let(:arguments) { [] }
++  let(:options) { {} }
++
++  it_behaves_like 'CLI Command'
++
++  describe '#list' do
++    let(:action) { :list }
++
++    context 'with bubble domain record' do
++      let!(:domain) { Fabricate(:bubble_domain) }
++
++      it 'lists all the domains by default' do
++        expect { subject }
++          .to output_results(
++            domain.domain
++          )
++      end
++    end
++  end
++
++  describe '#add' do
++    let(:action) { :add }
++
++    context 'without any options' do
++      it 'warns about usage and exits' do
++        expect { subject }
++          .to raise_error(Thor::Error, 'No domain(s) given')
++      end
++    end
++
++    context 'when bubble domains exist' do
++      let(:options) { {} }
++      let(:domain) { 'host.example' }
++      let(:arguments) { [domain] }
++
++      before { Fabricate(:bubble_domain, domain: domain) }
++
++      it 'does not add a new domain' do
++        expect { subject }
++          .to output_results('is already in the bubble')
++          .and(not_change(BubbleDomain, :count))
++      end
++    end
++
++    context 'when no bubble domains exist' do
++      let(:domain) { 'host.example' }
++      let(:arguments) { [domain] }
++
++      it 'adds a new domain' do
++        expect { subject }
++          .to output_results('Added 1')
++          .and(change(BubbleDomain, :count).by(1))
++      end
++    end
++  end
++
++  describe '#remove' do
++    let(:action) { :remove }
++
++    context 'without any options' do
++      it 'warns about usage and exits' do
++        expect { subject }
++          .to raise_error(Thor::Error, 'No domain(s) given')
++      end
++    end
++
++    context 'when bubble domains exist' do
++      let(:domain) { 'host.example' }
++      let(:arguments) { [domain] }
++
++      before { Fabricate(:bubble_domain, domain: domain) }
++
++      it 'removes the domain' do
++        expect { subject }
++          .to output_results('Removed 1')
++          .and(change(BubbleDomain, :count).by(-1))
++      end
++    end
++
++    context 'when no bubble domains exist' do
++      let(:domain) { 'host.example' }
++      let(:arguments) { [domain] }
++
++      it 'does not remove a domain' do
++        expect { subject }
++          .to output_results('is not in the bubble')
++          .and(not_change(BubbleDomain, :count))
++      end
++    end
++  end
++end
+diff --git a/spec/models/bubble_domain_spec.rb b/spec/models/bubble_domain_spec.rb
+new file mode 100644
+index 0000000000..3522ffd20b
+--- /dev/null
++++ b/spec/models/bubble_domain_spec.rb
+@@ -0,0 +1,53 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++
++RSpec.describe BubbleDomain do
++  describe 'Validations' do
++    it { is_expected.to validate_presence_of(:domain) }
++
++    context 'when a normalized domain exists' do
++      before { Fabricate(:bubble_domain, domain: 'にゃん') }
++
++      it { is_expected.to_not allow_value('xn--r9j5b5b').for(:domain) }
++    end
++  end
++
++  describe '.bubble_domains' do
++    subject { described_class.bubble_domains }
++
++    context 'without bubble domains' do
++      it { is_expected.to be_an(Array).and(be_empty) }
++    end
++
++    context 'with bubble domains' do
++      let!(:bubble_domain) { Fabricate :bubble_domain }
++      let!(:other_bubble_domain) { Fabricate :bubble_domain }
++
++      it { is_expected.to contain_exactly(bubble_domain.domain, other_bubble_domain.domain) }
++    end
++  end
++
++  describe '.rule_for' do
++    subject { described_class.rule_for(domain) }
++
++    let(:domain) { 'host.example' }
++
++    context 'with no records' do
++      it { is_expected.to be_nil }
++    end
++
++    context 'with matching record' do
++      let!(:bubble_domain) { Fabricate :bubble_domain, domain: }
++
++      it { is_expected.to eq(bubble_domain) }
++    end
++
++    context 'when called with non normalized string' do
++      let!(:bubble_domain) { Fabricate :bubble_domain, domain: }
++      let(:domain) { '  HOST.example/' }
++
++      it { is_expected.to eq(bubble_domain) }
++    end
++  end
++end
+diff --git a/spec/models/public_feed_spec.rb b/spec/models/public_feed_spec.rb
+index db422c67d4..1cfbaeecd9 100644
+--- a/spec/models/public_feed_spec.rb
++++ b/spec/models/public_feed_spec.rb
+@@ -8,6 +8,7 @@ RSpec.describe PublicFeed do
+   before do
+     Setting.local_live_feed_access = 'public'
+     Setting.remote_live_feed_access = 'public'
++    Setting.bubble_live_feed_access = 'public'
+   end
+ 
+   describe '#get' do
+diff --git a/spec/models/tag_feed_spec.rb b/spec/models/tag_feed_spec.rb
+index c4abe079e6..0eba99870e 100644
+--- a/spec/models/tag_feed_spec.rb
++++ b/spec/models/tag_feed_spec.rb
+@@ -6,6 +6,7 @@ RSpec.describe TagFeed do
+   before do
+     Setting.local_topic_feed_access = 'public'
+     Setting.remote_topic_feed_access = 'public'
++    Setting.bubble_topic_feed_access = 'public'
+   end
+ 
+   describe '#get' do
+diff --git a/spec/requests/admin/bubble_domains_spec.rb b/spec/requests/admin/bubble_domains_spec.rb
+new file mode 100644
+index 0000000000..1236bffa5b
+--- /dev/null
++++ b/spec/requests/admin/bubble_domains_spec.rb
+@@ -0,0 +1,16 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++
++RSpec.describe 'Admin Bubble Domains' do
++  describe 'POST /admin/bubble_domains' do
++    before { sign_in Fabricate(:admin_user) }
++
++    it 'gracefully handles invalid nested params' do
++      post admin_bubble_domains_path(bubble_domain: 'invalid')
++
++      expect(response)
++        .to have_http_status(400)
++    end
++  end
++end
+diff --git a/spec/requests/api/v1/instances/bubble_domains_spec.rb b/spec/requests/api/v1/instances/bubble_domains_spec.rb
+new file mode 100644
+index 0000000000..b23a5d9fbb
+--- /dev/null
++++ b/spec/requests/api/v1/instances/bubble_domains_spec.rb
+@@ -0,0 +1,137 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++
++RSpec.describe 'Bubble Domains' do
++  describe 'GET /api/v1/instance/bubble_domains' do
++    let(:user) { Fabricate(:user) }
++    let(:token) { Fabricate(:accessible_access_token, resource_owner_id: user.id).token }
++
++    before { Fabricate(:bubble_domain) }
++
++    context 'with bubble domains set to all' do
++      before { Setting.show_bubble_domains = 'all' }
++
++      it 'returns http success' do
++        get api_v1_instance_bubble_domains_path
++
++        expect(response)
++          .to have_http_status(200)
++
++        expect(response.content_type)
++          .to start_with('application/json')
++
++        expect(response.parsed_body)
++          .to be_present
++          .and(be_an(Array))
++          .and(have_attributes(size: 1))
++      end
++    end
++
++    context 'with bubble domains set to users' do
++      before { Setting.show_bubble_domains = 'users' }
++
++      context 'without authentication token' do
++        it 'returns http not found' do
++          get api_v1_instance_bubble_domains_path
++
++          expect(response)
++            .to have_http_status(404)
++        end
++      end
++
++      context 'with authentication token' do
++        context 'with unapproved user' do
++          before { user.update(approved: false) }
++
++          it 'returns http not found' do
++            get api_v1_instance_bubble_domains_path, headers: { 'Authorization' => "Bearer #{token}" }
++
++            expect(response)
++              .to have_http_status(404)
++          end
++        end
++
++        context 'with unconfirmed user' do
++          before { user.update(confirmed_at: nil) }
++
++          it 'returns http not found' do
++            get api_v1_instance_bubble_domains_path, headers: { 'Authorization' => "Bearer #{token}" }
++
++            expect(response)
++              .to have_http_status(404)
++          end
++        end
++
++        context 'with disabled user' do
++          before { user.update(disabled: true) }
++
++          it 'returns http not found' do
++            get api_v1_instance_bubble_domains_path, headers: { 'Authorization' => "Bearer #{token}" }
++
++            expect(response)
++              .to have_http_status(404)
++          end
++        end
++
++        context 'with suspended user' do
++          before { user.account.update(suspended_at: Time.zone.now) }
++
++          it 'returns http not found' do
++            get api_v1_instance_bubble_domains_path, headers: { 'Authorization' => "Bearer #{token}" }
++
++            expect(response)
++              .to have_http_status(403)
++          end
++        end
++
++        context 'with moved user' do
++          before { user.account.update(moved_to_account_id: Fabricate(:account).id) }
++
++          it 'returns http success' do
++            get api_v1_instance_bubble_domains_path, headers: { 'Authorization' => "Bearer #{token}" }
++
++            expect(response)
++              .to have_http_status(200)
++
++            expect(response.content_type)
++              .to start_with('application/json')
++
++            expect(response.parsed_body)
++              .to be_present
++              .and(be_an(Array))
++              .and(have_attributes(size: 1))
++          end
++        end
++
++        context 'with normal user' do
++          it 'returns http success' do
++            get api_v1_instance_bubble_domains_path, headers: { 'Authorization' => "Bearer #{token}" }
++
++            expect(response)
++              .to have_http_status(200)
++
++            expect(response.content_type)
++              .to start_with('application/json')
++
++            expect(response.parsed_body)
++              .to be_present
++              .and(be_an(Array))
++              .and(have_attributes(size: 1))
++          end
++        end
++      end
++    end
++
++    context 'with bubble domains set to disabled' do
++      before { Setting.show_bubble_domains = 'disabled' }
++
++      it 'returns http not found' do
++        get api_v1_instance_bubble_domains_path
++
++        expect(response)
++          .to have_http_status(404)
++      end
++    end
++  end
++end
+diff --git a/spec/requests/api/v1/timelines/link_spec.rb b/spec/requests/api/v1/timelines/link_spec.rb
+index 2a3ede9c48..2abe8ce20a 100644
+--- a/spec/requests/api/v1/timelines/link_spec.rb
++++ b/spec/requests/api/v1/timelines/link_spec.rb
+@@ -87,7 +87,7 @@ RSpec.describe 'Link' do
+ 
+     context 'when the instance does not allow public preview' do
+       before do
+-        Form::AdminSettings.new(local_topic_feed_access: 'authenticated', remote_topic_feed_access: 'authenticated').save
++        Form::AdminSettings.new(local_topic_feed_access: 'authenticated', remote_topic_feed_access: 'authenticated', bubble_topic_feed_access: 'authenticated').save
+       end
+ 
+       it_behaves_like 'forbidden for wrong scope', 'profile'
+@@ -125,6 +125,7 @@ RSpec.describe 'Link' do
+       before do
+         Setting.local_topic_feed_access = 'public'
+         Setting.remote_topic_feed_access = 'public'
++        Setting.bubble_topic_feed_access = 'public'
+       end
+ 
+       context 'with an authorized user' do
+diff --git a/spec/requests/api/v1/timelines/public_spec.rb b/spec/requests/api/v1/timelines/public_spec.rb
+index 29a0f3b706..7225f30662 100644
+--- a/spec/requests/api/v1/timelines/public_spec.rb
++++ b/spec/requests/api/v1/timelines/public_spec.rb
+@@ -39,6 +39,7 @@ RSpec.describe 'Public' do
+       before do
+         Setting.local_live_feed_access = 'public'
+         Setting.remote_live_feed_access = 'public'
++        Setting.bubble_live_feed_access = 'public'
+       end
+ 
+       it_behaves_like 'forbidden for wrong scope', 'profile'
+@@ -103,7 +104,7 @@ RSpec.describe 'Public' do
+ 
+     context 'when the instance does not allow public preview' do
+       before do
+-        Form::AdminSettings.new(local_live_feed_access: 'authenticated', remote_live_feed_access: 'authenticated').save
++        Form::AdminSettings.new(local_live_feed_access: 'authenticated', remote_live_feed_access: 'authenticated', bubble_live_feed_access: 'authenticated').save
+       end
+ 
+       it_behaves_like 'forbidden for wrong scope', 'profile'
+diff --git a/spec/requests/api/v1/timelines/tag_spec.rb b/spec/requests/api/v1/timelines/tag_spec.rb
+index 0992d59c79..eaded9e9db 100644
+--- a/spec/requests/api/v1/timelines/tag_spec.rb
++++ b/spec/requests/api/v1/timelines/tag_spec.rb
+@@ -16,6 +16,7 @@ RSpec.describe 'Tag' do
+     before do
+       Setting.local_topic_feed_access = 'public'
+       Setting.remote_topic_feed_access = 'public'
++      Setting.bubble_topic_feed_access = 'public'
+     end
+ 
+     shared_examples 'a successful request to the tag timeline' do
+@@ -104,7 +105,7 @@ RSpec.describe 'Tag' do
+ 
+     context 'when the instance does not allow public preview' do
+       before do
+-        Form::AdminSettings.new(local_topic_feed_access: 'authenticated', remote_topic_feed_access: 'authenticated').save
++        Form::AdminSettings.new(local_topic_feed_access: 'authenticated', remote_topic_feed_access: 'authenticated', bubble_topic_feed_access: 'authenticated').save
+       end
+ 
+       it_behaves_like 'forbidden for wrong scope', 'profile'
+diff --git a/streaming/index.js b/streaming/index.js
+index c4c295521a..45dad922af 100644
+--- a/streaming/index.js
++++ b/streaming/index.js
+@@ -118,6 +118,8 @@ const CHANNEL_NAMES = [
+   'public:media',
+   'public:local',
+   'public:local:media',
++  'public:bubble',
++  'public:bubble:media',
+   'public:remote',
+   'public:remote:media',
+   'hashtag',
+@@ -438,6 +440,8 @@ const startServer = async () => {
+       return onlyMedia ? 'public:media' : 'public';
+     case '/api/v1/streaming/public/local':
+       return onlyMedia ? 'public:local:media' : 'public:local';
++    case '/api/v1/streaming/public/bubble':
++      return onlyMedia ? 'public:bubble:media' : 'public:bubble';
+     case '/api/v1/streaming/public/remote':
+       return onlyMedia ? 'public:remote:media' : 'public:remote';
+     case '/api/v1/streaming/hashtag':
+@@ -620,27 +624,31 @@ const startServer = async () => {
+    * @returns {Promise.<{ localAccess: boolean, remoteAccess: boolean }>}
+    */
+   const getFeedAccessSettings = async (kind, req) => {
+-    const access = { localAccess: true, remoteAccess: true };
++    const access = { localAccess: true, bubbleAccess: true, remoteAccess: true };
+ 
+     if (req.permissions & PERMISSION_VIEW_FEEDS) {
+       return access;
+     }
+ 
+-    let localAccessVar, remoteAccessVar;
++    let localAccessVar, bubbleAccessVar, remoteAccessVar;
+ 
+     if (kind === 'hashtag') {
+       localAccessVar = 'local_topic_feed_access';
++      bubbleAccessVar = 'bubble_topic_feed_access';
+       remoteAccessVar = 'remote_topic_feed_access';
+     } else {
+       localAccessVar = 'local_live_feed_access';
++      bubbleAccessVar = 'bubble_live_feed_access';
+       remoteAccessVar = 'remote_live_feed_access';
+     }
+ 
+-    const result = await pgPool.query('SELECT var, value FROM settings WHERE var IN ($1, $2)', [localAccessVar, remoteAccessVar]);
++    const result = await pgPool.query('SELECT var, value FROM settings WHERE var IN ($1, $2, $3)', [localAccessVar, bubbleAccessVar, remoteAccessVar]);
+ 
+     result.rows.forEach((row) => {
+       if (row.var === localAccessVar) {
+         access.localAccess = row.value !== "--- disabled\n";
++      } else if (row.var === bubbleAccessVar) {
++        access.bubbleAccess = row.value !== "--- disabled\n";
+       } else {
+         access.remoteAccess = row.value !== "--- disabled\n";
+       }
+@@ -659,11 +667,12 @@ const startServer = async () => {
+    * @param {Object} options
+    * @param {boolean} options.needsFiltering
+    * @param {boolean=} options.filterLocal
++   * @param {boolean=} options.filterBubble
+    * @param {boolean=} options.filterRemote
+    * @param {boolean=} options.allowLocalOnly
+    * @returns {SubscriptionListener}
+    */
+-  const streamFrom = (channelIds, req, log, output, attachCloseHandler, destinationType, { needsFiltering, filterLocal, filterRemote, allowLocalOnly } = { needsFiltering: false, filterLocal: false, filterRemote: false, allowLocalOnly: false }) => {
++  const streamFrom = (channelIds, req, log, output, attachCloseHandler, destinationType, { needsFiltering, filterLocal, filterBubble, filterRemote, allowLocalOnly } = { needsFiltering: false, filterLocal: false, filterBubble: false, filterRemote: false, allowLocalOnly: false }) => {
+     log.info({ channelIds }, `Starting stream`);
+ 
+     /**
+@@ -769,6 +778,8 @@ const startServer = async () => {
+         if (accountDomain) {
+           // @ts-expect-error
+           queries.push(client.query('SELECT 1 FROM account_domain_blocks WHERE account_id = $1 AND domain = $2', [req.accountId, accountDomain]));
++          // @ts-expect-error
++          queries.push(client.query('SELECT 1 FROM bubble_domains WHERE domain = $1', [accountDomain]));
+         }
+ 
+         // @ts-expect-error
+@@ -783,7 +794,7 @@ const startServer = async () => {
+           // Handling blocks & mutes and domain blocks: If one of those applies,
+           // then we don't transmit the payload of the event to the client
+           // @ts-expect-error
+-          if (values[0].rows.length > 0 || (accountDomain && values[1].rows.length > 0)) {
++          if (values[0].rows.length > 0 || (accountDomain && (values[1].rows.length > 0 || (filterBubble && values[2].rows.length > 0)))) {
+             return;
+           }
+ 
+@@ -800,7 +811,7 @@ const startServer = async () => {
+           // @ts-ignore
+           if (!req.cachedFilters) {
+             // @ts-expect-error
+-            const filterRows = values[accountDomain ? 2 : 1].rows;
++            const filterRows = values[accountDomain ? 3 : 1].rows;
+ 
+             req.cachedFilters = filterRows.reduce((cache, filter) => {
+               if (cache[filter.id]) {
+@@ -1075,7 +1086,7 @@ const startServer = async () => {
+    * @param {Request} req
+    * @param {string} name
+    * @param {StreamParams} params
+-   * @returns {Promise.<{ channelIds: string[], options: { needsFiltering: boolean, filterLocal?: boolean, filterRemote?: boolean, allowLocalOnly?: boolean } }>}
++   * @returns {Promise.<{ channelIds: string[], options: { needsFiltering: boolean, filterLocal?: boolean, filterBubble?: boolean, filterRemote?: boolean, allowLocalOnly?: boolean } }>}
+    */
+   const channelNameToIds = (req, name, params) => new Promise((resolve, reject) => {
+     /**
+@@ -1084,10 +1095,10 @@ const startServer = async () => {
+      * @param {{ needsFiltering: boolean, allowLocalOnly: boolean }} options
+      */
+     const resolveFeed = (feedKind, channelId, options) => {
+-      getFeedAccessSettings(feedKind, req).then(({ localAccess, remoteAccess }) => {
++      getFeedAccessSettings(feedKind, req).then(({ localAccess, bubbleAccess, remoteAccess }) => {
+         resolve({
+           channelIds: [channelId],
+-          options: { ...options, filterLocal: !localAccess, filterRemote: !remoteAccess },
++          options: { ...options, filterLocal: !localAccess, filterBubble: !bubbleAccess, filterRemote: !remoteAccess },
+         });
+       }).catch(() => {
+         reject(new Error('Error getting feed access settings'));
+@@ -1117,6 +1128,13 @@ const startServer = async () => {
+       break;
+     case 'public:local':
+       resolveFeed('public', 'timeline:public:local', { needsFiltering: true, allowLocalOnly: true });
++      break;
++    case 'public:bubble':
++      resolve({
++        channelIds: ['timeline:public:bubble'],
++        options: { needsFiltering: true, allowLocalOnly: false },
++      });
++
+       break;
+     case 'public:remote':
+       resolveFeed('public', 'timeline:public:remote', { needsFiltering: true, allowLocalOnly: false });
+@@ -1129,6 +1147,13 @@ const startServer = async () => {
+       break;
+     case 'public:local:media':
+       resolveFeed('public', 'timeline:public:local:media', { needsFiltering: true, allowLocalOnly: true });
++      break;
++    case 'public:bubble:media':
++      resolve({
++        channelIds: ['timeline:public:bubble:media'],
++        options: { needsFiltering: true, allowLocalOnly: false },
++      });
++
+       break;
+     case 'public:remote:media':
+       resolveFeed('public', 'timeline:public:remote:media', { needsFiltering: true, allowLocalOnly: false });
