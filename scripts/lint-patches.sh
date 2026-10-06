@@ -171,16 +171,23 @@ if [[ -n "${BASE_REPO:-}" ]]; then
   else
     tmp="$(mktemp -d)"
     if git -C "$BASE_REPO" worktree add --detach "$tmp" "$BASE_COMMIT" >/dev/null 2>&1; then
+      am_log="$(mktemp)"
       applied=0
       for patch in "${series_patches[@]}"; do
-        if git -C "$tmp" am "$PATCH_DIR/$patch" >/dev/null 2>&1; then
+        # `git am` commits, so it needs a committer identity; do not require the
+        # caller to have one configured (CI runners have none).
+        if git -C "$tmp" -c user.name=fedi-patchset \
+             -c user.email=fedi-patchset@localhost \
+             am "$PATCH_DIR/$patch" >"$am_log" 2>&1; then
           applied=$((applied + 1))
         else
           git -C "$tmp" am --abort >/dev/null 2>&1
           fail "$patch does not apply cleanly on $BASE_COMMIT"
+          sed 's/^/        /' "$am_log"
           break
         fi
       done
+      rm -f "$am_log"
       if [[ $applied -eq ${#series_patches[@]} ]]; then
         ok "all ${#series_patches[@]} patches applied cleanly"
       fi
