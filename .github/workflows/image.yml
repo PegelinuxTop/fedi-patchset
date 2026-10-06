@@ -1,0 +1,139 @@
+name: Container image
+
+# Builds ghcr.io/pegelinuxtop/fedi.my.id: a glitch-soc checkout with this patch
+# series applied, built with the tree's own Dockerfile. The build itself is
+# scripts/build-image.sh, the same script you run locally.
+#
+# Triggers:
+#   - manually, with an optional glitch-soc ref (branch, tag or commit SHA)
+#   - weekly, to pick up new glitch-soc commits on main
+#   - on pushes to main that touch the series, so the image follows the patches
+on:
+  workflow_dispatch:
+    inputs:
+      glitch_ref:
+        description: glitch-soc ref to build on (branch, tag or commit SHA)
+        type: string
+        default: main
+      platforms:
+        description: space-separated platforms (multi-platform requires push)
+        type: string
+        default: linux/amd64
+      push:
+        description: push the image to GHCR
+        type: boolean
+        default: true
+  schedule:
+    - cron: '17 4 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'patches/**'
+      - 'series'
+      - '.base-commit'
+      - 'scripts/build-image.sh'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: build and push
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the GitHub Container registry
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the glitch-soc ref and the image tags
+        id: plan
+        env:
+          GLITCH_REF: ${{ inputs.glitch_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          # Exact ref names only: a bare pattern also matches branches whose name
+          # ends in it (glitch-soc has refs/heads/glitch-soc/main as well as main).
+          if [[ "$GLITCH_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            sha="$GLITCH_REF"
+          else
+            sha=""
+            for candidate in "refs/heads/$GLITCH_REF" "refs/tags/$GLITCH_REF^{}" \
+                             "refs/tags/$GLITCH_REF" "$GLITCH_REF"; do
+              sha="$(git ls-remote https://github.com/glitch-soc/mastodon.git "$candidate" \
+                | awk 'NR==1 {print $1}')"
+              [[ -n "$sha" ]] && break
+            done
+          fi
+          if [[ -z "$sha" ]]; then
+            echo "::error::cannot resolve '$GLITCH_REF' on glitch-soc/mastodon"
+            exit 1
+          fi
+
+          # GHCR needs a lowercase image name
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/fedi.my.id"
+          tags=("glitch-${sha:0:12}" "patchset-$(git rev-parse --short HEAD)")
+          if [[ "$GLITCH_REF" == "main" ]]; then tags+=("latest"); fi
+          platforms="${{ inputs.platforms || 'linux/amd64' }}"
+          if [[ "${{ github.event_name != 'workflow_dispatch' || inputs.push }}" != "true" ]]; then
+            platforms="${platforms%% *}"   # --load takes a single platform
+          fi
+
+          {
+            echo "sha=$sha"
+            echo "image=$image"
+            echo "tags=${tags[*]}"
+            echo "platforms=$platforms"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Image plan"
+            echo
+            echo "- glitch-soc \`$GLITCH_REF\` -> \`$sha\`"
+            echo "- patchset revision \`$(git rev-parse --short HEAD)\`"
+            echo "- image \`$image\`"
+            echo "- tags \`${tags[*]}\`"
+            echo "- platforms \`$platforms\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build and push
+        env:
+          IMAGE: ${{ steps.plan.outputs.image }}
+          TAGS: ${{ steps.plan.outputs.tags }}
+          PLATFORMS: ${{ steps.plan.outputs.platforms }}
+          SHA: ${{ steps.plan.outputs.sha }}
+          PUSH: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
+        run: |
+          set -euo pipefail
+          args=(--dest "$RUNNER_TEMP/tree" --glitch-ref "$SHA" --image "$IMAGE" --verify)
+          for tag in $TAGS; do args+=(--tag "$tag"); done
+          for platform in $PLATFORMS; do args+=(--platform "$platform"); done
+          [[ "$PUSH" == "true" ]] && args+=(--push)
+          ./scripts/build-image.sh "${args[@]}"
+
+          {
+            echo
+            echo "### Built"
+            echo
+            for tag in $TAGS; do echo "- \`$IMAGE:$tag\`"; done
+            [[ "$PUSH" == "true" ]] && echo "- pushed; \`docker pull $IMAGE:${TAGS%% *}\`" \
+                                   || echo "- not pushed (\`--load\` only)"
+          } >> "$GITHUB_STEP_SUMMARY"

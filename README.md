@@ -35,6 +35,7 @@ glitch-soc main, so upstream updates are a rebase here instead of a wait.
 | building the tree, comparing it with the fork | bash ≥ 4, git, coreutils |
 | `scripts/setup.sh --stg` | [Stacked Git](https://stacked-git.github.io/) 2.x (`stg`) |
 | the app's own checks (`format:check`, `typecheck`, `lint`, `test:js`) | Node ≥ 22 and Yarn 4 |
+| the container image (`scripts/build-image.sh`, the `image` workflow) | Docker with buildx |
 | Ruby-side checks (`bin/rubocop`, `haml-lint`, i18n-tasks, migrations, specs) | Ruby 4.0.7 + the app's gems, PostgreSQL, Redis |
 
 ## Quick start
@@ -71,10 +72,13 @@ docs/updating.md                 rebasing onto a newer glitch-soc
 docs/patch-reference.md          what each patch contains and why
 docs/verification.md             how to verify a build, and what was verified
 docs/fork-comparison.md          how the result relates to the fork's dev branch
+docs/image.md                    the container image: how it is built, tagged and run
 scripts/setup.sh                 build the patched tree
 scripts/lint-patches.sh          static checks on the series + apply test
 scripts/compare-with-fork.sh     compare the result with fedi.my.id@dev
+scripts/build-image.sh           build the container image from a patched tree
 scripts/check-ruby-syntax.mjs    parse changed Ruby files without Ruby (Prism/WASM)
+.github/workflows/image.yml      builds and pushes ghcr.io/pegelinuxtop/fedi.my.id
 ```
 
 ## The patch series
@@ -121,6 +125,22 @@ collides with a migration present at the base commit, which
 0004  20230215074425_move_emoji_reaction_settings.rb
 0004  20250518031405_remove_quote_id_from_statuses.rb
 ```
+
+## The container image
+
+`ghcr.io/pegelinuxtop/fedi.my.id` is glitch-soc with this series applied, built by
+`scripts/build-image.sh` from the tree's own `Dockerfile` (fork stages included).
+The [`image` workflow](.github/workflows/image.yml) builds it on demand, weekly on
+glitch-soc `main`, and whenever the patches change, tagging `latest`,
+`glitch-<sha12>` and `patchset-<rev7>`. The same script builds it locally:
+
+```sh
+scripts/build-image.sh                       # pinned .base-commit, loaded locally
+scripts/build-image.sh --glitch-ref main --push   # current glitch-soc, pushed
+```
+
+[docs/image.md](docs/image.md) covers the triggers and the tag scheme, the
+first-time GHCR setup, multi-platform (arm64) builds, and how to run the image.
 
 ## Keeping up with glitch-soc
 
