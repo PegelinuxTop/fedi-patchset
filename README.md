@@ -35,7 +35,9 @@ whose tree is the verified build tree
 the previous `dev` (`b416d280e0`), which is preserved as the branch
 `backup-20261006`. Wherever these documents say "`dev`", they mean that pre-sync
 branch unless they say otherwise; [docs/fork-comparison.md](docs/fork-comparison.md)
-explains what the comparison now checks.
+explains what the comparison now checks. The fork's default branch `main` still
+points at the pre-sync merge history (`0828922071`), so a fresh clone gets the
+fork before this rebase — check out `dev` for the current tree.
 
 ## Requirements
 

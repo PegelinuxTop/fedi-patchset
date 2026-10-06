@@ -158,7 +158,7 @@ git worktree add --detach /tmp/fedi-dev             # isolated build, optional
 
 # in the worktree: apply the series to the new base, then merge it into dev
 cd /tmp/fedi-dev
-git checkout -b series "$NEW_BASE"
+git checkout -b series "$NEW_BASE"                  # the base picked in step 1
 git am ~/Workspace/mastodon/fedi-patchset/patches/*.patch
 git checkout -B dev-sync origin/dev
 git merge --no-commit --no-ff series                # conflicts are expected here
