@@ -104,12 +104,27 @@ SCSS themes and skins:
 - **Migrations**: `20221218015350_fix_foreign_keys_status_reactions`,
   `20230215074425_move_emoji_reaction_settings`,
   `20250518031405_remove_quote_id_from_statuses`.
-- **Also touches**: `Gemfile.lock` (bundler platforms), `Dockerfile`,
-  `config/environments/production.rb`,
-  `config/initializers/content_security_policy.rb`, `streaming/database.js`,
-  `streaming/redis.js`, `app/models/account.rb`, `app/lib/feed_manager.rb`,
-  `app/views/admin/settings/other/show.html.haml`, `config/locales-glitch/*`,
-  other locale overlays (`locales/{de,fr}.js`) and the app's `eslint.config.mjs`.
+- **Also touches**: 65 modified files, of which three are theme SCSS
+  (`styles/custom_common.scss`, `styles/modern.scss`, …) covered above. The rest:
+  `Gemfile.lock` (bundler platforms), `stylelint.config.js`, `README.md`,
+  `.gitignore`, the two `.github/workflows/` files, the icon PNGs under
+  `app/javascript/icons/`, `config/environments/production.rb`,
+  `config/initializers/content_security_policy.rb`,
+  `config/locales-glitch/simple_form.fr.yml`, `streaming/database.js`,
+  `streaming/redis.js`, `app/lib/feed_manager.rb`, `app/models/media_attachment.rb`,
+  `lib/exceptions.rb`, `lib/sanitize_ext/sanitize_config.rb`, the admin
+  `app/views/admin/{dashboard/index,settings/other/show}.html.haml`, the fork's
+  Ruby specs (`spec/**`), and the React glue it rebrands (both flavours'
+  `icon_button`, `timeline_hint`, `autosuggest_textarea`, `compose_form`,
+  `notification_*` and `status/legacy` components, glitch
+  `local_settings/page/**`, `compare_history_modal`, …).
+  `app/javascript/flavours/glitch/locales/{de,fr}.js`, the qrtool files
+  (`config/initializers/qrtool.rb`, `lib/paperclip/qr_decoder.rb`),
+  `.stylelintignore`, `domain_blocks.csv` and the skin `names.yml` files are among
+  the 208 *new* files.
+  Note what is *not* here: `Dockerfile` and `eslint.config.mjs` are 0005, and
+  `streaming/index.js` and `app/models/account.rb` are 0002 — glitch-soc changed
+  those files too, so their fork hunks live in the reconciliation patch.
 
 ## 0005 — `fedi/compat-overlay`
 
@@ -124,8 +139,8 @@ touch at all. Eleven modified files, no new ones:
 | `app/javascript/mastodon/locales/en.json` | `notification.reaction` |
 | `config/locales/ja.yml` | `reject_blurhash` / `reject_pattern` strings |
 | `eslint.config.mjs` | the fork's lint configuration on glitch-soc's newer config (keeps the widened `files:` coverage, restores `mjs: 'never'`, relaxes `import/no-restricted-paths` for the glitch locale overlays) |
-| `app/javascript/flavours/glitch/components/scrollable_list/index.jsx`, `app/javascript/mastodon/components/scrollable_list/index.jsx` | `jsdoc/reject-any-type`: `@param {*}` → a typed `Immutable.Map` |
-| `app/javascript/mastodon/components/status/legacy/content.jsx` | `jsdoc/reject-any-type`: `@param {any}` → a typed `Immutable.Map` |
+| `app/javascript/flavours/glitch/components/scrollable_list/index.jsx`, `app/javascript/mastodon/components/scrollable_list/index.jsx` | `jsdoc/reject-any-type`: `@param {*} props` → `@param {{ scrollKey: string }} props` |
+| `app/javascript/mastodon/components/status/legacy/content.jsx` | `jsdoc/reject-any-type`: `@param {any} status` → `@param {import('immutable').Map<string, unknown>} status` |
 | `app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx`, `app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx` | `react/button-has-type`: added the explicit `type='button'` |
 
 The remaining three lint fixes are folded into the patch that owns the file:
@@ -144,7 +159,10 @@ patch, by these rules:
 2. files no patch touched (shared configuration) are assigned by hand: bubble and
    reaction model/config/schema files to 0002, the rest to 0004;
 3. five files receive hunks from two patches (0001 then 0003) — they are additive
-   and the series applies cleanly.
+   and the series applies cleanly;
+4. files the fork never touches, edited only to satisfy the repository's own
+   linters, go to **0005** (they are among the 6 deviations the fork comparison
+   reports separately).
 
 Consequences worth knowing when rebasing:
 
@@ -155,13 +173,19 @@ Consequences worth knowing when rebasing:
   notification components);
 - conflicts in `config/settings.yml`, `db/schema.rb`,
   `app/models/form/admin_settings.rb`, `config/locales/en.yml`,
-  `config/routes/admin.rb` and `db/migrate/*` land in **0002**;
+  `config/routes/admin.rb`, `db/migrate/*`,
+  `app/services/fan_out_on_write_service.rb`,
+  `app/controllers/api/v1/timelines/public_controller.rb` and the fan-out specs
+  land in **0002**;
 - conflicts in the GIF service, `config/gifs.yml`, `config/routes/api.rb` and the
   glitch GIF modal land in **0003**;
-- conflicts in theme SCSS, `Gemfile.lock`, `Dockerfile`, `streaming/*`,
-  `app/models/account.rb` and the locale overlays land in **0004**;
-- conflicts in `app/services/fan_out_on_write_service.rb`, `config/settings.yml` and
-  the fan-out specs land in **0002**;
-- conflicts in the two `link_footer.tsx` files, `mastodon/locales/en.json`,
-  `config/locales/ja.yml`, `eslint.config.mjs` and the five lint-fix files land in
-  **0005**.
+- conflicts in theme SCSS, `Gemfile.lock`, `streaming/database.js`,
+  `streaming/redis.js`, the glitch locale overlays (`locales/{de,fr}.js`),
+  `stylelint.config.js`, the fork's specs and helpers land in **0004**;
+- conflicts in `Dockerfile`, the two `link_footer.tsx` files,
+  `mastodon/locales/en.json`, `config/locales/ja.yml`, `eslint.config.mjs` and the
+  five lint-fix files land in **0005** — `Dockerfile`, `eslint.config.mjs` and
+  both `link_footer.tsx` are files glitch-soc also changed, which is why their
+  fork hunks cannot live in 0004;
+- `streaming/index.js` and `app/models/account.rb` also belong to **0002** for the
+  same reason (glitch-soc changed them, so they are not part of 0004).

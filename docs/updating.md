@@ -85,9 +85,16 @@ intent on top** — never revert glitch-soc to make a fork hunk apply unchanged.
   `import/no-restricted-paths` off for `app/javascript/flavours/glitch/locales/*.js`.
 - `app/services/fan_out_on_write_service.rb`: keep the per-channel
   `broadcast_to_public_stream(channel, timelines)` shape and the
-  `show_{reblogs,replies}_in_{local,federated}_timelines` names; glitch-soc's
-  upstream version uses a single `broadcast_to` lambda and
-  `show_reblogs_in_public_timelines` (README deviation 1).
+  `show_{reblogs,replies}_in_{local,federated}_timelines` names. Both sides look
+  different before the patch set: glitch-soc at the base commit publishes each
+  channel directly with one reply guard
+  (`return if @status.reply? && … && !Setting.show_replies_in_public_timelines`)
+  and uses the pre-rename keys in `broadcastable?`, while `dev` keeps a
+  `broadcast_to` lambda, has no reply filter (a no-op expression), tests the
+  pre-rename reblog key in `broadcastable?` and publishes
+  `timeline:public:bubble` twice. Neither shape is what this tree needs
+  (README deviation 1), so re-apply the patch's structure rather than either
+  side's.
 
 Per-patch conflict surface is listed at the end of
 [patch-reference.md](patch-reference.md).
