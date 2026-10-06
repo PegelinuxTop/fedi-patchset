@@ -77,6 +77,17 @@ intent on top** — never revert glitch-soc to make a fork hunk apply unchanged.
   only exists in the fork there is nothing to merge.
 - `Dockerfile`, `streaming/*`, `eslint.config.mjs`, the two `link_footer.tsx`:
   these are the files that tend to become the `fedi/compat-overlay` patch.
+- `eslint.config.mjs` after a rebase: keep the `files: ['**/*.js', '**/*.jsx',
+  '**/*.mjs', '**/*.ts', '**/*.tsx']` list on the block that sets
+  `ecmaVersion: 2021` (dropping `**/*.jsx` breaks 14 `.jsx` files with `Parsing
+  error: Unexpected token =`; dropping `**/*.mjs` breaks the config file itself),
+  keep glitch-soc's `mjs: 'never'`, and keep the override that turns
+  `import/no-restricted-paths` off for `app/javascript/flavours/glitch/locales/*.js`.
+- `app/services/fan_out_on_write_service.rb`: keep the per-channel
+  `broadcast_to_public_stream(channel, timelines)` shape and the
+  `show_{reblogs,replies}_in_{local,federated}_timelines` names; glitch-soc's
+  upstream version uses a single `broadcast_to` lambda and
+  `show_reblogs_in_public_timelines` (README deviation 1).
 
 Per-patch conflict surface is listed at the end of
 [patch-reference.md](patch-reference.md).
@@ -120,8 +131,9 @@ values, and the Ruby-side checks that need a full Ruby environment
 - [ ] `.base-commit` and `series` match `patches/`
 - [ ] the numbers quoted in `README.md` and `docs/fork-comparison.md` are refreshed
       (patch file counts, `+/-` totals, comparison counts)
-- [ ] the app's checks pass, or the failures are the known pre-existing ones
-- [ ] `yarn test:js` passes in the patched tree
+- [ ] the app's checks pass: `yarn format:check`, `yarn typecheck`, `yarn lint:css`
+      and ESLint over the whole repository (all clean for this revision), plus
+      `yarn test:js`
 
 ## Troubleshooting
 

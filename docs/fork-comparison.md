@@ -47,9 +47,10 @@ is:
    - **result vs fork** — every differing path classified as modified/added/removed
      by glitch-soc, or as a deviation;
    - **warnings** — a file the fork customised that glitch-soc removed or renamed
-     (the rename is reported with its new name), and deviations that live in files
-     glitch-soc also changed (harder to judge, since the file differs for two
-     reasons at once).
+     (the rename is reported with its new name), and deviations in files *neither*
+     side changed, i.e. edits the patch set introduces itself (the lint fixes and
+     the new fan-out specs); a deviation inside a file glitch-soc did change is
+     invisible here, because the path is attributed to glitch-soc.
 
 Exit status 0 means: nothing lost, no path differs for an unexplained reason.
 
@@ -67,26 +68,43 @@ For `.base-commit` `b3877d5b24`, fork `origin/dev` `b416d280e0`, merge point
 ==> Fork-only files (glitch-soc did not touch them)
   count                      : 421
   byte-identical to the fork : 352
-  differing                  : 69        (63 theme SCSS + 6 intentional, see README)
+  differing                  : 69        (63 theme SCSS + 6 code, see README)
 
 ==> Result vs fork
-  differing paths in total              : 785
+  differing paths in total              : 791
   modified by glitch-soc since the merge: 620
   added by glitch-soc                   : 77
   removed by glitch-soc                 : 19
-  deviations (not glitch-soc-driven)    : 69
+  deviations (not glitch-soc-driven)    : 75
   warn  the fork customised config/vite/plugin-sw-locales.ts, which glitch-soc
         renamed to config/vite/plugin-sw-locales.mts (see Deviations in README.md)
+  warn  6 deviation(s) are in files the fork does not change — patch-set
+        additions, check they are intentional
 ```
 
-Read it as: 785 paths differ from `dev`; 716 of them are glitch-soc's own work
-(620 modified, 77 added, 19 removed, renames counted as both), and 69 are
-deviations — the same 69 listed in the README.
+Read it as: 791 paths differ from `dev`; 716 of them are glitch-soc's own work
+(620 modified, 77 added, 19 removed, renames counted as both), and 75 are
+deviations documented in the README — 69 in files only the fork touches, plus 6 in
+files neither the fork nor glitch-soc changed, which only the patch set edits. The 6
+are the five lint/type fixes (`flavours/glitch/components/scrollable_list/index.jsx`,
+`flavours/glitch/features/local_settings/navigation/item/index.jsx`,
+`flavours/glitch/features/notifications/components/pill_bar_button.jsx`,
+`mastodon/components/scrollable_list/index.jsx`,
+`mastodon/components/status/legacy/content.jsx`) and
+`spec/services/fan_out_on_write_service_spec.rb`, where the patch set adds the
+fan-out spec cases (README deviation 1).
+
+The 69 fork-only deviations are 63 theme SCSS files (formatter normalisation, README
+deviation 5) plus `flavours/glitch/initial_state.ts` (deviation 2),
+`streaming/index.js` (deviation 3), `app/services/fan_out_on_write_service.rb`
+(deviation 1) and three lint fixes in files the fork does not otherwise share with
+glitch-soc (`flavours/glitch/components/status/legacy/content.jsx`,
+`features/gif_modal/index.tsx`, `features/ui/components/sign_in_banner.jsx`).
 
 Two things are worth knowing about the counting:
 
 - renames inflate the added/removed figures (a rename is one deletion plus one
-  addition); the current revision has 13 renamed files, hence 19 removed instead of
+  addition); the current revision has 11 renamed files, hence 19 removed instead of
   8;
 - the 8 files that exist in `dev` and not in the result are all composer-redesign
   files glitch-soc deleted (`containers/compose_container.jsx`,
@@ -100,11 +118,12 @@ Two things are worth knowing about the counting:
 
 - Classification is per file. A cosmetic deviation *inside* a file that glitch-soc
   also changed is invisible to it — for example the dropped whitespace-only line in
-  `autosuggest_textarea.jsx` (README deviation 4) or the lint fixes in
-  `eslint.config.mjs`. There are 42 files that both sides changed; their merge was
-  reviewed by hand for the 8 that conflicted and auto-merged for the rest, and the
-  preservation check (464/464) is the safety net that matters: it proves the fork's
-  change to each of those files is still present.
+  `autosuggest_textarea.jsx` (README deviation 4) or the `eslint.config.mjs` edits
+  that glitch-soc also touched — both are therefore counted as glitch-soc
+  modifications rather than deviations. There are 43 files that both sides changed;
+  their merge was reviewed by hand for the 8 that conflicted and auto-merged for the
+  rest, and the preservation check (464/464) is the safety net that matters: it
+  proves the fork's change to each of those files is still present.
 - It compares commits, not the working tree, so it is unaffected by local edits.
 - It cannot compare against what is running on fedi.my.id, only against the `dev`
   branch as it exists in your clone. Fetch before you compare.
@@ -118,5 +137,5 @@ Two things are worth knowing about the counting:
 | `FAIL n fork change(s) are identical to the pre-fork baseline` | that many customisations are missing from the result | the merge dropped them; re-apply the fork's change to those files and re-export (`docs/updating.md`) |
 | `FAIL n path(s) differ from the fork for no glitch-soc reason` | a path was added or removed without glitch-soc doing it | investigate the patch set; it usually means a hand-edit or a bad merge resolution |
 | `warn … renamed to …` | the fork customised a file glitch-soc renamed | confirm the tweak is either carried over by hand or listed as a deviation |
-| `warn n deviation(s) are in files glitch-soc also changed` | deviations inside both-changed files | review those files against `dev` and document anything intentional |
+| `warn n deviation(s) are in files the fork does not change` | edits the patch set introduces itself (lint fixes, added specs) | confirm each is intentional and documented; these are the only deviations with no fork counterpart to compare against |
 | a deviation that is not in the README | undocumented behaviour difference | either revert it or document it under "Deviations" |

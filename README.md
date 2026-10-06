@@ -6,7 +6,7 @@ from a stack of five patches.
 
 - **Base commit**: `.base-commit` — glitch-soc `main`
   `b3877d5b245c6fa65f1a7639fa5593c6b6ade8fc` (2026-10-05)
-- **Result**: 5 patches, 461 files changed, +54400 / −300 against that commit
+- **Result**: 5 patches, 467 files changed, +54516 / −309 against that commit
 - **Licence**: AGPL-3.0, like glitch-soc and Mastodon — see [LICENSE](LICENSE)
 
 ## Why this exists
@@ -82,12 +82,12 @@ scripts/check-ruby-syntax.mjs    parse changed Ruby files without Ruby (Prism/WA
 | # | Patch | Files | Contents |
 |---|-------|-------|----------|
 | 1 | `feature/reaction-list` | 97 | Emoji reactions (TheEssem): status-reaction API, service layer, federation, notifications, reaction list UI, notification/admin settings, 2 migrations |
-| 2 | `feature/bubble-timeline` | 59 | Bubble timeline (TheEssem): bubble-domain API + admin UI, `BUBBLE` feed and column, streaming channels, fan-out, settings, 3 migrations |
+| 2 | `feature/bubble-timeline` | 60 | Bubble timeline (TheEssem): bubble-domain API + admin UI, `BUBBLE` feed and column, streaming channels, fan-out, settings, 3 migrations — plus the fork's per-timeline boost/reply settings wired through fan-out and their specs |
 | 3 | `feature/gif-picker` | 31 | Tenor/Klipy GIF search (TheEssem): GIF API client + picker UI, `gif_search` in the instance serializers, locales |
 | 4 | `fedi/branding-themes` | 273 | The operator's own customisations: sign-in banner, footers, custom modern/gekka/sakura/tangerine UI themes and skins, reject-pattern settings, locale additions, 3 migrations |
-| 5 | `fedi/compat-overlay` | 6 | Reconciliation with glitch-soc changes: Elk footer link, Docker `qrtool` stage, `ja.yml` blurhash strings, `en.json` reaction notification, `eslint.config.mjs` |
+| 5 | `fedi/compat-overlay` | 11 | Reconciliation with glitch-soc and with the repo's own linters: Elk footer link, Docker `qrtool` stage, `ja.yml` blurhash strings, `en.json` reaction notification, `eslint.config.mjs`, and lint fixes for five files the fork does not otherwise touch |
 
-Per-patch sizes are 2391/+92−, 1362/+76−, 891/+21−, 49717/+112− and 41/+1−
+Per-patch sizes are 2391/+92−, 1474/+83−, 891/+21−, 49717/+112− and 45/+3−
 (lines added/removed). The split is by feature or customisation, so an upstream
 rebase conflicts on the furthest patch that touches a file. Shared configuration
 that serves more than one feature (`config/settings.yml`, `db/schema.rb`,
@@ -153,10 +153,28 @@ The tree is generated from a merge of `fedi.my.id@dev` onto the base commit, so 
 is the fork's tree plus glitch-soc's evolution since the fork's last glitch-soc
 merge. These are the intentional differences from `dev` itself:
 
-1. **`app/services/fan_out_on_write_service.rb`** — same observable behaviour as
-   `dev` (public/local/remote/bubble broadcasts, replies not filtered), but the
-   unreachable `broadcast_to` lambda, the no-op `@status.reply? && …` statement
-   and the duplicate `timeline:public:bubble` publish were removed.
+1. **The fork's per-timeline boost/reply settings are now wired through fan-out**
+   (`config/settings.yml`, `app/services/fan_out_on_write_service.rb`,
+   `spec/services/fan_out_on_write_service_spec.rb`). In `dev` the four admin
+   toggles (`show_reblogs/replies_in_{local,federated}_timelines`) only affected the
+   REST timeline: `broadcastable?` still required the pre-rename
+   `show_reblogs_in_public_timelines` (default `false` in `dev`'s `config/settings.yml`
+   and exposed nowhere, so a boost reached the public streams only if a `settings`
+   row happened to hold `true`), the reply toggle was never consulted (the
+   corresponding expression in `broadcast_to_public_streams!` was a no-op), and
+   `timeline:public:bubble` was published twice per bubble status. Now
+   `config/settings.yml` carries the four split keys (default `false`),
+   `broadcast_to_public_streams!` filters every channel with its own pair —
+   `timeline:public:local` with `_local_`, and `timeline:public`,
+   `timeline:public:remote`, `timeline:public:bubble` plus their `:media` variants
+   with `_federated_` — and self-replies keep publishing. What to expect: boosts
+   reach the public streams again when a toggle is on, non-self replies stop
+   streaming when the reply toggle is off, and the mixed `timeline:public` follows
+   the federated pair (so a local non-self reply can appear in the mixed timeline
+   but not in the local one). Boosts still never reach hashtag streams or hashtag
+   followers, because a local boost is stored as a tagless wrapper
+   (`ReblogService` creates it with `text: ''` and no tags), so `@status.tags` is
+   empty. Specs were added but could not be run here (no Ruby).
 2. **`app/javascript/flavours/glitch/initial_state.ts`** — `dev`'s
    `useSystemEmojiFont = getMeta('system_emoji_font')` export was dropped: the
    meta field no longer exists in glitch-soc, the export is unused, and it fails
@@ -173,65 +191,67 @@ merge. These are the intentional differences from `dev` itself:
    `font-display` declaration on `body`. `dev`'s whitespace-only tweak to
    `config/vite/plugin-sw-locales.ts` is gone, because glitch-soc renamed that
    file to `.mts` and the built `.mts` carries glitch-soc's content.
-6. **Lint/type fixes**, all pre-existing in `dev`, so the tree passes its own
-   checks:
+6. **Lint/type fixes** so the repository's own checks pass. `dev` widens ESLint
+   coverage by adding `files: ['**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx']` to
+   the block that carries `ecmaVersion: 2021`, the TypeScript parser and the
+   browser globals, so that the block applies to `.jsx` files as well. This patch
+   set keeps that coverage — dropping `'**/*.jsx'` from the list makes `.jsx` files
+   fall back to a lower `ecmaVersion` and they fail to parse (`Parsing error:
+   Unexpected token =`, 14 files) — and fixes the findings instead:
    - `app/javascript/flavours/glitch/features/gif_modal/index.tsx` — dropped an
-     inline `eslint-disable-next-line jsx-a11y/no-autofocus` that the fork's own
-     `eslint.config.mjs` makes redundant (the rule is off globally), and which
-     `--report-unused-disable-directives` reports as an error.
-   - `app/javascript/flavours/glitch/features/ui/components/sign_in_banner.jsx` —
-     added `type='button'` (`react/button-has-type`; the button is not inside a
-     form, so this only makes the default explicit).
-   - `eslint.config.mjs` — an override turning `import/no-restricted-paths` off
-     for `app/javascript/flavours/glitch/locales/*.js`, which exist to extend the
-     vanilla locale JSON files.
-   - `eslint.config.mjs` — `**/*.mjs` added to the block that sets
-     `ecmaVersion: 2021`. `dev` narrowed that block to `js`/`jsx`/`ts`/`tsx`,
-     which left the repository's own `eslint.config.mjs` (which uses
-     `import.meta`) to be parsed as ES2018 and fail.
-   - `app/javascript/flavours/glitch/components/status/legacy/content.jsx` —
-     typed `getStatusContent`'s parameter as
-     `import('immutable').Map<string, unknown>` instead of `any`
+     inline `eslint-disable-next-line jsx-a11y/no-autofocus` that the rule being
+     off makes redundant (`--report-unused-disable-directives`).
+   - `app/javascript/flavours/glitch/features/ui/components/sign_in_banner.jsx`,
+     `app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx`
+     and `app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx`
+     — added `type='button'` (`react/button-has-type`); none of them is inside a
+     form, so the default is only made explicit.
+   - `app/javascript/{flavours/glitch,mastodon}/components/scrollable_list/index.jsx`
+     and `app/javascript/{flavours/glitch,mastodon}/components/status/legacy/content.jsx`
+     — replaced `@param {*}` / `@param {any}` with concrete jsdoc types
      (`jsdoc/reject-any-type`).
+   - `eslint.config.mjs` — added `**/*.mjs` to that `files` list (without it the
+     repository's own config file is parsed at the default `ecmaVersion` and fails
+     on `import.meta`), restored glitch-soc's `mjs: 'never'` (`dev` had commented
+     it out), and added an override turning `import/no-restricted-paths` off for
+     `app/javascript/flavours/glitch/locales/*.js`, which exist to extend the
+     vanilla locale JSON files.
 7. **`app/javascript/mastodon/features/ui/index.jsx`** — kept glitch-soc's newer
    forms where `dev` still has the older ones: the named `{ BundleColumnError }`
    import (glitch-soc changed that module's export), the one-line
    `if (this.dataTransferIsText(e.dataTransfer)) return;` and the trailing
    `return;`. Semantically identical to `dev`'s variants.
 
-## Known issues carried over from `dev`
+## Notes and caveats
 
-Left untouched on purpose, because fixing them changes runtime behaviour:
+Behaviour worth knowing before deploying this tree:
 
-- **Timeline boost/reply settings disagree.** The fork splits
-  `show_boosts/replies_in_public_timelines` into `_local_` and `_federated_`
-  variants in the API and the admin UI, but the rename was never finished:
-  - `app/controllers/api/v1/timelines/public_controller.rb` reads
-    `Setting.show_replies_in_local_timelines` / `_federated_` (and the `_reblogs_`
-    equivalents); `app/models/form/admin_settings.rb` and
-    `config/locales-glitch/en.yml` expose the same new names, while
-    `config/settings.yml` still defines defaults for the old
-    `show_replies_in_public_timelines` / `show_reblogs_in_public_timelines`.
-    `Setting#[]` returns `nil` for unknown keys, so on a fresh install the new
-    names behave like the old `false` default until an admin saves them once.
-  - `app/services/fan_out_on_write_service.rb` still reads
-    `Setting.show_reblogs_in_public_timelines` in `broadcastable?`, so reblogs are
-    never fanned out to the public/local/bubble streams no matter what the admin
-    toggles. Fixing it means pointing `broadcastable?` (and the
-    `config/settings.yml` defaults) at the renamed keys.
-- **The whole-repo `yarn lint:js` reports 5 problems**, all in upstream files this
-  patch set does not touch (they surface because `dev`'s `eslint.config.mjs`
-  widened lint coverage to `**/*.js`/`**/*.jsx`, which glitch-soc's own config
-  skips): `react/button-has-type` in
-  `app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx`
-  and `.../features/notifications/components/pill_bar_button.jsx`, plus
-  `jsdoc/reject-any-type` in
-  `app/javascript/flavours/glitch/components/scrollable_list/index.jsx`,
-  `app/javascript/mastodon/components/scrollable_list/index.jsx` and
-  `app/javascript/mastodon/components/status/legacy/content.jsx`. They are
-  pre-existing in `dev`; fixing them would mean touching files the fork does not
-  otherwise change, so `yarn lint:js` fails with `--max-warnings 0` until they are
-  addressed in the fork.
+- **The bubble timeline only ever shows remote accounts.** A status is "in the
+  bubble" when its author's domain is in `bubble_domains` (`Status#bubble?` →
+  `BubbleDomain.in_bubble?` → `rule_for`), and `rule_for` returns `nil` for a
+  blank domain, so local accounts can never be in the bubble. Fan-out matches
+  that: `broadcast_to_public_streams!` publishes locals to
+  `timeline:public:local` and remotes to `timeline:public:remote`,
+  `timeline:public` and — only `if @status.bubble?` — `timeline:public:bubble`.
+  The column is labelled accordingly ("posts from people … on other servers
+  selected by {domain}"). A boost of a bubble-domain post is published by the
+  booster's own status, so a local account that boosts a bubble post does not put
+  it on the bubble timeline.
+- **`show_*_in_{local,federated}_timelines` defaults to `false`, and older
+  `settings` rows are ignored.** Upstream Mastodon once used
+  `show_reblogs/replies_in_public_timelines`; a database migrated through those
+  versions may still hold rows under those keys. They are no longer read. This
+  changes nothing for a fresh install or one that kept the defaults (`dev`'s
+  `config/settings.yml` also defaulted the old keys to `false`), but an install
+  whose `settings` table has the old reblog key set to `true` used to stream boosts
+  and will stop until the two new toggles are enabled in **Administration →
+  Settings**.
+- **The Ruby-side checks are unverified in this repository.** `bin/rubocop`,
+  `i18n-tasks`, `db:migrate` plus a schema comparison, and RSpec — including the
+  new `spec/services/fan_out_on_write_service_spec.rb` contexts — have not been
+  run, because the machine this patch set was assembled on has no Ruby
+  toolchain. The changed Ruby files parse (Prism), but run the commands in
+  [docs/verification.md](docs/verification.md) before trusting the tree.
 
 ## Provenance
 
@@ -254,6 +274,12 @@ commit):
 5. the patches exported with `git format-patch`, and the checks in
    [docs/verification.md](docs/verification.md) run.
 
-Of the fork's 464 changed files, all 464 survive; 352 of the 421 files glitch-soc
-did not touch are byte-identical to `dev`, and the other 69 are the deviations
-above. [docs/fork-comparison.md](docs/fork-comparison.md) has the full breakdown.
+Of the fork's 464 changed files, all 464 survive. Of the 421 files that only the
+fork touches, 352 are byte-identical to `dev` and the other 69 are fork-only
+deviations above; 6 further deviations are files neither the fork nor glitch-soc
+changed, which only the patch set edits — the five lint/type fixes and the new
+fan-out spec cases (deviation 1). 791 paths in total differ from `dev`: 620
+modified, 77 added and 19 removed by glitch-soc since the fork's last merge, plus
+those 75 deviations. The fork's own changes are in patches 1–4; patch 5 is the
+reconciliation layer on top.
+[docs/fork-comparison.md](docs/fork-comparison.md) has the full breakdown.

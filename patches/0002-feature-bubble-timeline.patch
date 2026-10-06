@@ -1,4 +1,4 @@
-From 4792bc615f2e995e3a5a72f38cd62b92a0fc45c6 Mon Sep 17 00:00:00 2001
+From 2f7be82f7465d71b4244978a8aac963c2cd716bf Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:07:48 +0700
 Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
@@ -35,7 +35,7 @@ Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
  app/models/tag_feed.rb                        |   6 +
  app/policies/bubble_domain_policy.rb          |   7 +
  app/services/batched_remove_status_service.rb |   7 +-
- app/services/fan_out_on_write_service.rb      |   4 +-
+ app/services/fan_out_on_write_service.rb      |  37 +++-
  app/services/remove_status_service.rb         |   2 +
  .../bubble_domains/_bubble_domain.html.haml   |   5 +
  .../admin/bubble_domains/index.html.haml      |  18 ++
@@ -46,7 +46,7 @@ Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
  config/navigation.rb                          |   1 +
  config/routes/admin.rb                        |   2 +
  config/routes/web_app.rb                      |   1 +
- config/settings.yml                           |   6 +
+ config/settings.yml                           |  12 +-
  .../20240114042123_create_bubble_domains.rb   |  13 ++
  ...804_add_bubble_timeline_preview_setting.rb |  19 ++
  ...d_bubble_timeline_topic_preview_setting.rb |  19 ++
@@ -63,8 +63,9 @@ Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
  spec/requests/api/v1/timelines/link_spec.rb   |   3 +-
  spec/requests/api/v1/timelines/public_spec.rb |   3 +-
  spec/requests/api/v1/timelines/tag_spec.rb    |   3 +-
+ .../services/fan_out_on_write_service_spec.rb |  80 +++++++
  streaming/index.js                            |  43 +++-
- 59 files changed, 1362 insertions(+), 76 deletions(-)
+ 60 files changed, 1474 insertions(+), 83 deletions(-)
  create mode 100644 app/controllers/admin/bubble_domains_controller.rb
  create mode 100644 app/controllers/api/v1/instances/bubble_domains_controller.rb
  create mode 100644 app/javascript/flavours/glitch/features/bubble_timeline/components/column_settings.jsx
@@ -1514,26 +1515,64 @@ index bac46f9015..4176383116 100644
  
      status.tags.map { |tag| tag.name.downcase }.each do |hashtag|
 diff --git a/app/services/fan_out_on_write_service.rb b/app/services/fan_out_on_write_service.rb
-index 25ff3bead2..5f8896c150 100644
+index 25ff3bead2..52b008b9ec 100644
 --- a/app/services/fan_out_on_write_service.rb
 +++ b/app/services/fan_out_on_write_service.rb
-@@ -146,14 +146,14 @@ class FanOutOnWriteService < BaseService
+@@ -146,15 +146,36 @@ class FanOutOnWriteService < BaseService
    end
  
    def broadcast_to_public_streams!
 -    return if @status.reply? && @status.in_reply_to_account_id != @account.id && !Setting.show_replies_in_public_timelines
--
-     redis.publish('timeline:public', anonymous_payload)
-     redis.publish(@status.local? ? 'timeline:public:local' : 'timeline:public:remote', anonymous_payload)
-+    redis.publish('timeline:public:bubble', anonymous_payload) if @status.bubble?
++    if @status.local?
++      broadcast_to_public_stream('timeline:public:local', :local)
++    else
++      broadcast_to_public_stream('timeline:public:remote', :federated)
++    end
++    broadcast_to_public_stream('timeline:public', :federated)
++    broadcast_to_public_stream('timeline:public:bubble', :federated) if @status.bubble?
  
-     if @status.with_media?
-       redis.publish('timeline:public:media', anonymous_payload)
-       redis.publish(@status.local? ? 'timeline:public:local:media' : 'timeline:public:remote:media', anonymous_payload)
-+      redis.publish('timeline:public:bubble:media', anonymous_payload) if @status.bubble?
+-    redis.publish('timeline:public', anonymous_payload)
+-    redis.publish(@status.local? ? 'timeline:public:local' : 'timeline:public:remote', anonymous_payload)
++    return unless @status.with_media?
+ 
+-    if @status.with_media?
+-      redis.publish('timeline:public:media', anonymous_payload)
+-      redis.publish(@status.local? ? 'timeline:public:local:media' : 'timeline:public:remote:media', anonymous_payload)
++    broadcast_to_public_stream('timeline:public:media', :federated)
++    if @status.local?
++      broadcast_to_public_stream('timeline:public:local:media', :local)
++    else
++      broadcast_to_public_stream('timeline:public:remote:media', :federated)
      end
++    broadcast_to_public_stream('timeline:public:bubble:media', :federated) if @status.bubble?
++  end
++
++  # The fork splits the "show boosts/replies in public timelines" settings into
++  # a local and a federated pair, so each public timeline is filtered on its own.
++  def broadcast_to_public_stream(channel, timelines)
++    return if @status.reblog? && !Setting.public_send(:"show_reblogs_in_#{timelines}_timelines")
++    return if non_self_reply? && !Setting.public_send(:"show_replies_in_#{timelines}_timelines")
++
++    redis.publish(channel, anonymous_payload)
++  end
++
++  def non_self_reply?
++    @status.reply? && @status.in_reply_to_account_id != @account.id
    end
  
+   def deliver_to_conversation!
+@@ -180,8 +201,10 @@ class FanOutOnWriteService < BaseService
+     @options[:update]
+   end
+ 
++  # Public statuses are fanned out to the public streams; the per-timeline
++  # boost/reply settings are applied per channel in broadcast_to_public_streams!.
+   def broadcastable?
+-    @status.public_visibility? && !@account.silenced? && (!@status.reblog? || Setting.show_reblogs_in_public_timelines)
++    @status.public_visibility? && !@account.silenced?
+   end
+ 
+   def subscribed_to_streaming_api?(account_id)
 diff --git a/app/services/remove_status_service.rb b/app/services/remove_status_service.rb
 index 2176400d54..dbc684b439 100644
 --- a/app/services/remove_status_service.rb
@@ -1756,7 +1795,7 @@ index 333efc434c..4aa7c75bfa 100644
    /publish
    /search
 diff --git a/config/settings.yml b/config/settings.yml
-index 4a6a51d71f..0bc4f7de36 100644
+index 4a6a51d71f..aa4c84e23a 100644
 --- a/config/settings.yml
 +++ b/config/settings.yml
 @@ -13,8 +13,10 @@ defaults: &defaults
@@ -1770,7 +1809,7 @@ index 4a6a51d71f..0bc4f7de36 100644
    remote_topic_feed_access: 'authenticated'
    show_staff_badge: true
    preview_sensitive_media: false
-@@ -25,6 +27,7 @@ defaults: &defaults
+@@ -25,16 +27,20 @@ defaults: &defaults
    trends: true
    trendable_by_default: false
    trending_status_cw: true
@@ -1778,7 +1817,14 @@ index 4a6a51d71f..0bc4f7de36 100644
    hide_followers_count: false
    disallowed_hashtags: # space separated string or list of hashtags without the hash
    bootstrap_timeline_accounts: ''
-@@ -35,6 +38,7 @@ defaults: &defaults
+   activity_api_enabled: true
+   peers_api_enabled: true
+-  show_reblogs_in_public_timelines: false
+-  show_replies_in_public_timelines: false
++  show_reblogs_in_local_timelines: false
++  show_replies_in_local_timelines: false
++  show_reblogs_in_federated_timelines: false
++  show_replies_in_federated_timelines: false
    default_content_type: 'text/plain'
    show_domain_blocks: 'disabled'
    show_domain_blocks_rationale: 'disabled'
@@ -1786,7 +1832,7 @@ index 4a6a51d71f..0bc4f7de36 100644
    outgoing_spoilers: ''
    require_invite_text: false
    backups_retention_period: 7
-@@ -44,6 +48,8 @@ defaults: &defaults
+@@ -44,6 +50,8 @@ defaults: &defaults
    opt_in_server_directory: false
    opt_in_server_recommendation: false
    wrapstodon: true
@@ -2453,6 +2499,97 @@ index 0992d59c79..eaded9e9db 100644
        end
  
        it_behaves_like 'forbidden for wrong scope', 'profile'
+diff --git a/spec/services/fan_out_on_write_service_spec.rb b/spec/services/fan_out_on_write_service_spec.rb
+index efc70d84c6..130cc7b369 100644
+--- a/spec/services/fan_out_on_write_service_spec.rb
++++ b/spec/services/fan_out_on_write_service_spec.rb
+@@ -77,6 +77,86 @@ RSpec.describe FanOutOnWriteService do
+     end
+   end
+ 
++  context 'when the status is a boost' do
++    let(:visibility) { 'public' }
++    let(:boosted) { Fabricate(:status, account: bob, visibility: 'public', text: 'Original') }
++    let(:status) { Fabricate(:status, account: alice, visibility: 'public', reblog: boosted) }
++
++    it 'does not broadcast boosts to the public timelines when they are disabled' do
++      subject.call(status)
++
++      expect(redis).to_not have_received(:publish).with('timeline:public', anything)
++      expect(redis).to_not have_received(:publish).with('timeline:public:local', anything)
++    end
++
++    context 'when boosts are enabled for local timelines' do
++      before { Setting.show_reblogs_in_local_timelines = true }
++
++      it 'broadcasts to the local timeline but not to the mixed public timeline' do
++        subject.call(status)
++
++        expect(redis).to have_received(:publish).with('timeline:public:local', anything)
++        expect(redis).to_not have_received(:publish).with('timeline:public', anything)
++      end
++    end
++
++    context 'when boosts are enabled for federated timelines' do
++      before { Setting.show_reblogs_in_federated_timelines = true }
++
++      it 'broadcasts to the mixed public timeline but not to the local timeline' do
++        subject.call(status)
++
++        expect(redis).to have_received(:publish).with('timeline:public', anything)
++        expect(redis).to_not have_received(:publish).with('timeline:public:local', anything)
++      end
++    end
++  end
++
++  context 'when the status is a reply to another account' do
++    let(:visibility) { 'public' }
++    let(:parent) { Fabricate(:status, account: bob, visibility: 'public') }
++    let(:status) { Fabricate(:status, account: alice, visibility: 'public', text: 'Hello @bob @eve #hoge', in_reply_to_id: parent.id) }
++
++    it 'does not broadcast replies to the public timelines when they are disabled' do
++      subject.call(status)
++
++      expect(redis).to_not have_received(:publish).with('timeline:public', anything)
++      expect(redis).to_not have_received(:publish).with('timeline:public:local', anything)
++      expect(redis).to have_received(:publish).with('timeline:hashtag:hoge', anything)
++    end
++
++    context 'when replies are enabled for local timelines' do
++      before { Setting.show_replies_in_local_timelines = true }
++
++      it 'broadcasts replies to the local timeline' do
++        subject.call(status)
++
++        expect(redis).to have_received(:publish).with('timeline:public:local', anything)
++      end
++    end
++  end
++
++  context 'when the status is a reply to the author themselves' do
++    let(:visibility) { 'public' }
++    let(:parent) { Fabricate(:status, account: alice, visibility: 'public') }
++    let(:status) { Fabricate(:status, account: alice, visibility: 'public', text: 'Hello @bob @eve #hoge', in_reply_to_id: parent.id) }
++
++    it 'broadcasts the reply even when replies are disabled' do
++      subject.call(status)
++
++      expect(redis).to have_received(:publish).with('timeline:public:local', anything)
++    end
++  end
++
++  describe 'the timeline boost and reply settings' do
++    it 'defaults to hiding boosts and replies in every public timeline' do
++      expect(Setting.show_reblogs_in_local_timelines).to be(false)
++      expect(Setting.show_replies_in_local_timelines).to be(false)
++      expect(Setting.show_reblogs_in_federated_timelines).to be(false)
++      expect(Setting.show_replies_in_federated_timelines).to be(false)
++    end
++  end
++
+   context 'when status is limited' do
+     let(:visibility) { 'limited' }
+ 
 diff --git a/streaming/index.js b/streaming/index.js
 index c4c295521a..45dad922af 100644
 --- a/streaming/index.js

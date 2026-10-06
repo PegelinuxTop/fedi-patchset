@@ -1,4 +1,4 @@
-From ae41e8aafd247f09db26ead61f1c66d838808852 Mon Sep 17 00:00:00 2001
+From 74260e7a5fc685ff1378dbd171a2a8ba25bfac10 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:28:10 +0700
 Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
@@ -6,12 +6,17 @@ Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
 
 ---
  Dockerfile                                        | 15 +++++++++++++++
+ .../glitch/components/scrollable_list/index.jsx   |  2 +-
+ .../local_settings/navigation/item/index.jsx      |  1 +
+ .../notifications/components/pill_bar_button.jsx  |  1 +
  .../glitch/features/ui/components/link_footer.tsx |  5 +++++
+ .../mastodon/components/scrollable_list/index.jsx |  2 +-
+ .../mastodon/components/status/legacy/content.jsx |  2 +-
  .../features/ui/components/link_footer.tsx        |  5 +++++
  app/javascript/mastodon/locales/en.json           |  1 +
  config/locales/ja.yml                             |  6 ++++++
- eslint.config.mjs                                 | 10 +++++++++-
- 6 files changed, 41 insertions(+), 1 deletion(-)
+ eslint.config.mjs                                 |  8 ++++++++
+ 11 files changed, 45 insertions(+), 3 deletions(-)
 
 diff --git a/Dockerfile b/Dockerfile
 index 90c1be362f..2285467767 100644
@@ -46,6 +51,43 @@ index 90c1be362f..2285467767 100644
  
  RUN \
    ldconfig; \
+diff --git a/app/javascript/flavours/glitch/components/scrollable_list/index.jsx b/app/javascript/flavours/glitch/components/scrollable_list/index.jsx
+index 14f1ee57ab..981917bc65 100644
+--- a/app/javascript/flavours/glitch/components/scrollable_list/index.jsx
++++ b/app/javascript/flavours/glitch/components/scrollable_list/index.jsx
+@@ -27,7 +27,7 @@ const listenerOptions = supportsPassiveEvents ? { passive: true } : false;
+ /**
+  *
+  * @param {import('flavours/glitch/store').RootState} state
+- * @param {*} props
++ * @param {{ scrollKey: string }} props
+  */
+ const mapStateToProps = (state, { scrollKey }) => {
+   return {
+diff --git a/app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx b/app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx
+index ad5e36b19d..ac21dae3cc 100644
+--- a/app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx
++++ b/app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx
+@@ -60,6 +60,7 @@ export default class LocalSettingsPage extends PureComponent {
+         onClick={handleClick}
+         className={finalClassName}
+         title={title}
++        type='button'
+         aria-label={title}
+       >
+         {iconElem} <span>{title}</span>
+diff --git a/app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx b/app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx
+index 633401d6e3..a70eb7f946 100644
+--- a/app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx
++++ b/app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx
+@@ -33,6 +33,7 @@ export default class PillBarButton extends PureComponent {
+         className={classNames('pillbar-button', { active })}
+         disabled={disabled}
+         onClick={this.onChange}
++        type='button'
+         aria-pressed={active}
+       >
+         {label}
 diff --git a/app/javascript/flavours/glitch/features/ui/components/link_footer.tsx b/app/javascript/flavours/glitch/features/ui/components/link_footer.tsx
 index 93be53498a..0644f7a3b1 100644
 --- a/app/javascript/flavours/glitch/features/ui/components/link_footer.tsx
@@ -62,6 +104,32 @@ index 93be53498a..0644f7a3b1 100644
            {context !== 'about' && (
              <li>
                <Link to='/about' target={multiColumn ? '_blank' : undefined}>
+diff --git a/app/javascript/mastodon/components/scrollable_list/index.jsx b/app/javascript/mastodon/components/scrollable_list/index.jsx
+index e44a827a2f..14a71a609b 100644
+--- a/app/javascript/mastodon/components/scrollable_list/index.jsx
++++ b/app/javascript/mastodon/components/scrollable_list/index.jsx
+@@ -27,7 +27,7 @@ const listenerOptions = supportsPassiveEvents ? { passive: true } : false;
+ /**
+  *
+  * @param {import('mastodon/store').RootState} state
+- * @param {*} props
++ * @param {{ scrollKey: string }} props
+  */
+ const mapStateToProps = (state, { scrollKey }) => {
+   return {
+diff --git a/app/javascript/mastodon/components/status/legacy/content.jsx b/app/javascript/mastodon/components/status/legacy/content.jsx
+index fee34b5f78..8fa3443253 100644
+--- a/app/javascript/mastodon/components/status/legacy/content.jsx
++++ b/app/javascript/mastodon/components/status/legacy/content.jsx
+@@ -24,7 +24,7 @@ const MAX_HEIGHT = 706; // 22px * 32 (+ 2px padding at the top)
+ 
+ /**
+  *
+- * @param {any} status
++ * @param {import('immutable').Map<string, unknown>} status
+  * @returns {string}
+  */
+ export function getStatusContent(status) {
 diff --git a/app/javascript/mastodon/features/ui/components/link_footer.tsx b/app/javascript/mastodon/features/ui/components/link_footer.tsx
 index 65635a8f62..15284e78d1 100644
 --- a/app/javascript/mastodon/features/ui/components/link_footer.tsx
@@ -108,18 +176,9 @@ index 0f661e7ae7..36af933863 100644
          authorized_fetch: 連合サーバーによる署名なしでの情報取得を拒否する
          authorized_fetch_overridden_hint: この設定は環境変数で指定されているため、ここでは変更できません。
 diff --git a/eslint.config.mjs b/eslint.config.mjs
-index 67f7da386d..30bfdd84d5 100644
+index 67f7da386d..8d399c6ef2 100644
 --- a/eslint.config.mjs
 +++ b/eslint.config.mjs
-@@ -75,7 +75,7 @@ export const baseConfig = [
-         {
-           js: 'never',
-           jsx: 'never',
--          mjs: 'never',
-+          //mjs: 'never',
-           ts: 'never',
-           mts: 'never',
-           tsx: 'never',
 @@ -153,6 +153,7 @@ export default tseslint.config([
    formatjs.configs.strict,
    storybook.configs['flat/recommended'],

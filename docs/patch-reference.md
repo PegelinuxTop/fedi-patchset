@@ -5,10 +5,10 @@ The series in `series` applies bottom-up on `.base-commit`:
 ```
 b3877d5b24 (glitch-soc main)
   └─ 0001-feature-reaction-list.patch        97 files   +2391 /  −92
-      └─ 0002-feature-bubble-timeline.patch  59 files   +1362 /  −76
+      └─ 0002-feature-bubble-timeline.patch  60 files   +1474 /  −83
           └─ 0003-feature-gif-picker.patch   31 files    +891 /  −21
               └─ 0004-fedi-branding-themes.patch 273 files +49717 / −112
-                  └─ 0005-fedi-compat-overlay.patch 6 files +41 / −1
+                  └─ 0005-fedi-compat-overlay.patch 11 files +45 / −3
 ```
 
 The patches are cumulative: sizes are relative to the previous patch, not to the
@@ -41,7 +41,8 @@ modified.
 
 ## 0002 — `feature/bubble-timeline`
 
-TheEssem's bubble timeline. 21 new files, 38 modified.
+TheEssem's bubble timeline, plus the fork's per-timeline boost/reply settings. 21 new
+files, 39 modified.
 
 - **New**: `app/controllers/admin/bubble_domains_controller.rb`,
   `app/controllers/api/v1/instances/bubble_domains_controller.rb`,
@@ -59,9 +60,17 @@ TheEssem's bubble timeline. 21 new files, 38 modified.
   components, `config/routes/admin.rb`, `config/routes/web_app.rb`,
   `config/navigation.rb`, `config/locales/en.yml`.
 - **Carries shared configuration**: `config/settings.yml` (bubble feed access,
-  `show_bubble_domains`, `visible_reactions`, `reject_pattern`, `reject_blurhash`),
+  `show_bubble_domains`, `visible_reactions`, `reject_pattern`, `reject_blurhash`,
+  and the four `show_{reblogs,replies}_in_{local,federated}_timelines` keys),
   `db/schema.rb` (bubble and reaction tables), `app/models/form/admin_settings.rb`,
   `config/locales/en.yml`, `app/views/admin/settings/discovery/show.html.haml`.
+- **Also carries the fork's fan-out wiring** (README deviation 1):
+  `broadcast_to_public_stream` applies each channel's own
+  `show_{reblogs,replies}_in_{local,federated}_timelines` pair, self-replies keep
+  publishing, and `broadcastable?` no longer tests the pre-rename reblog setting.
+  `spec/services/fan_out_on_write_service_spec.rb` gains the cases for it. This is
+  the only patch that touches `app/services/fan_out_on_write_service.rb`, so a
+  conflict in fan-out lands here.
 
 ## 0003 — `feature/gif-picker`
 
@@ -104,8 +113,9 @@ SCSS themes and skins:
 
 ## 0005 — `fedi/compat-overlay`
 
-Where glitch-soc's evolution since the fork's merge point had to be re-applied to
-a file the fork also changes. Six modified files:
+Where glitch-soc's evolution since the fork's merge point had to be re-applied to a
+file the fork also changes, plus the lint/type fixes for files the fork does not
+touch at all. Eleven modified files, no new ones:
 
 | File | Change |
 |---|---|
@@ -113,7 +123,16 @@ a file the fork also changes. Six modified files:
 | `app/javascript/{flavours/glitch,}/features/ui/components/link_footer.tsx` | the fork's "Alternative UI (Elk)" list item, kept alongside glitch-soc's now-conditional About item |
 | `app/javascript/mastodon/locales/en.json` | `notification.reaction` |
 | `config/locales/ja.yml` | `reject_blurhash` / `reject_pattern` strings |
-| `eslint.config.mjs` | the fork's lint configuration on glitch-soc's newer config |
+| `eslint.config.mjs` | the fork's lint configuration on glitch-soc's newer config (keeps the widened `files:` coverage, restores `mjs: 'never'`, relaxes `import/no-restricted-paths` for the glitch locale overlays) |
+| `app/javascript/flavours/glitch/components/scrollable_list/index.jsx`, `app/javascript/mastodon/components/scrollable_list/index.jsx` | `jsdoc/reject-any-type`: `@param {*}` → a typed `Immutable.Map` |
+| `app/javascript/mastodon/components/status/legacy/content.jsx` | `jsdoc/reject-any-type`: `@param {any}` → a typed `Immutable.Map` |
+| `app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx`, `app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx` | `react/button-has-type`: added the explicit `type='button'` |
+
+The remaining three lint fixes are folded into the patch that owns the file:
+`features/gif_modal/index.tsx` (0003, dropped the now-unused inline
+`jsx-a11y/no-autofocus` disable) and `sign_in_banner.jsx` plus
+`flavours/glitch/components/status/legacy/content.jsx` (0004, `type='button'` and a
+typed parameter).
 
 ## Ownership
 
@@ -141,5 +160,8 @@ Consequences worth knowing when rebasing:
   glitch GIF modal land in **0003**;
 - conflicts in theme SCSS, `Gemfile.lock`, `Dockerfile`, `streaming/*`,
   `app/models/account.rb` and the locale overlays land in **0004**;
+- conflicts in `app/services/fan_out_on_write_service.rb`, `config/settings.yml` and
+  the fan-out specs land in **0002**;
 - conflicts in the two `link_footer.tsx` files, `mastodon/locales/en.json`,
-  `config/locales/ja.yml` and `eslint.config.mjs` land in **0005**.
+  `config/locales/ja.yml`, `eslint.config.mjs` and the five lint-fix files land in
+  **0005**.

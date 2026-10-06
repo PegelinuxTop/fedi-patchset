@@ -290,7 +290,7 @@ if [[ -s "${tmp_list}.unexplained" ]]; then
   sed 's/^/        /' "${tmp_list}.unexplained"
 fi
 if [[ "$deviations" -gt "$fork_only_diff" ]]; then
-  warn "$((deviations - fork_only_diff)) deviation(s) are in files glitch-soc also changed — check the fork's intent survived the reconciliation"
+  warn "$((deviations - fork_only_diff)) deviation(s) are in files the fork does not change — patch-set additions, check they are intentional"
   comm -23 <(sort -u "${tmp_list}.deviations") <(sort -u "$tmp_fork_only") | sed 's/^/        /'
 fi
 
