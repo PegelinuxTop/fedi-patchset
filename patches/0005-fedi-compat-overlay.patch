@@ -1,22 +1,25 @@
-From ed3357c5cc529b0e85fb52b7b3c7675d457dd90d Mon Sep 17 00:00:00 2001
+From aa54c5f7970a1db7cd271182b76880550f083775 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:28:10 +0700
 Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
  (Elk footer, lint/drag fixes, Dockerfile qrtool, locales, sw-locales rename)
 
 ---
- Dockerfile                                        | 15 +++++++++++++++
- .../glitch/components/scrollable_list/index.jsx   |  2 +-
- .../local_settings/navigation/item/index.jsx      |  1 +
- .../notifications/components/pill_bar_button.jsx  |  1 +
- .../glitch/features/ui/components/link_footer.tsx |  5 +++++
- .../mastodon/components/scrollable_list/index.jsx |  2 +-
- .../mastodon/components/status/legacy/content.jsx |  2 +-
- .../features/ui/components/link_footer.tsx        |  5 +++++
- app/javascript/mastodon/locales/en.json           |  1 +
- config/locales/ja.yml                             |  6 ++++++
- eslint.config.mjs                                 |  8 ++++++++
- 11 files changed, 45 insertions(+), 3 deletions(-)
+ Dockerfile                                    | 15 +++++++++++++
+ .../components/scrollable_list/index.jsx      |  2 +-
+ .../local_settings/navigation/item/index.jsx  |  1 +
+ .../components/pill_bar_button.jsx            |  1 +
+ .../features/ui/components/link_footer.tsx    |  5 +++++
+ .../components/scrollable_list/index.jsx      |  2 +-
+ .../components/status/legacy/content.jsx      |  2 +-
+ .../features/ui/components/link_footer.tsx    |  5 +++++
+ app/javascript/mastodon/locales/en.json       |  1 +
+ config/locales/ja.yml                         |  6 ++++++
+ eslint.config.mjs                             |  8 +++++++
+ .../export_domain_blocks_controller_spec.rb   |  4 ++--
+ spec/models/form/import_spec.rb               | 21 +++++++++++++++----
+ spec/requests/cache_spec.rb                   | 11 +++++++++-
+ 14 files changed, 74 insertions(+), 10 deletions(-)
 
 diff --git a/Dockerfile b/Dockerfile
 index 90c1be362f..2285467767 100644
@@ -199,3 +202,95 @@ index 67f7da386d..8d399c6ef2 100644
 +    },
 +  },
  ]);
+diff --git a/spec/controllers/admin/export_domain_blocks_controller_spec.rb b/spec/controllers/admin/export_domain_blocks_controller_spec.rb
+index ad95ccc3d4..02b1e02415 100644
+--- a/spec/controllers/admin/export_domain_blocks_controller_spec.rb
++++ b/spec/controllers/admin/export_domain_blocks_controller_spec.rb
+@@ -41,7 +41,7 @@ RSpec.describe Admin::ExportDomainBlocksController do
+   describe 'POST #import' do
+     context 'with complete domain blocks CSV' do
+       before do
+-        post :import, params: { admin_import: { data: fixture_file_upload('domain_blocks.csv') } }
++        post :import, params: { admin_import: { data: fixture_file_upload(Rails.root.join(file_fixture_path, 'domain_blocks.csv').to_s) } }
+       end
+ 
+       it 'renders page with expected domain blocks and returns http success' do
+@@ -52,7 +52,7 @@ RSpec.describe Admin::ExportDomainBlocksController do
+ 
+     context 'with a list of only domains' do
+       before do
+-        post :import, params: { admin_import: { data: fixture_file_upload('domain_blocks_list.txt') } }
++        post :import, params: { admin_import: { data: fixture_file_upload(Rails.root.join(file_fixture_path, 'domain_blocks_list.txt').to_s) } }
+       end
+ 
+       it 'renders page with expected domain blocks and returns http success' do
+diff --git a/spec/models/form/import_spec.rb b/spec/models/form/import_spec.rb
+index 7d7b4f3762..4436ff7e35 100644
+--- a/spec/models/form/import_spec.rb
++++ b/spec/models/form/import_spec.rb
+@@ -5,10 +5,23 @@ require 'rails_helper'
+ RSpec.describe Form::Import do
+   subject { described_class.new(current_account: account, type: import_type, mode: import_mode, data: data) }
+ 
+-  let(:account)     { Fabricate(:account) }
+-  let(:data)        { fixture_file_upload(import_file) }
++  let(:account) { Fabricate(:account) }
++  let(:data)        { fixture_upload(import_file) }
+   let(:import_mode) { 'merge' }
+ 
++  # `fixture_file_upload` treats a bare name as a path relative to the working
++  # directory when such a file exists, and this repository keeps a
++  # `domain_blocks.csv` at its root (the fork's blocklist export), which would
++  # shadow `spec/fixtures/files/domain_blocks.csv`. Resolve a bare fixture name
++  # explicitly; an already-open file or an explicit path is passed through.
++  def fixture_upload(name, mime_type = nil)
++    if name.is_a?(String)
++      path = Rails.root.join(file_fixture_path, name)
++      name = path.to_s if path.exist?
++    end
++    fixture_file_upload(name, mime_type)
++  end
++
+   describe 'validations' do
+     shared_examples 'incompatible import type' do |type, file|
+       let(:import_file) { file }
+@@ -44,7 +57,7 @@ RSpec.describe Form::Import do
+     end
+ 
+     describe 'when the import type is custom_filters' do
+-      let(:data)        { fixture_file_upload(import_file, content_type) }
++      let(:data)        { fixture_upload(import_file, content_type) }
+       let(:import_file) { File.open('spec/fixtures/files/custom_filters.json') }
+       let(:import_type) { 'custom_filters' }
+       let(:content_type) { 'application/json' }
+@@ -271,7 +284,7 @@ RSpec.describe Form::Import do
+ 
+     describe 'when importing json' do
+       let(:import_type) { 'custom_filters' }
+-      let(:data) { fixture_file_upload('custom_filters.json', 'application/json') }
++      let(:data) { fixture_upload('custom_filters.json', 'application/json') }
+       let(:import_mode) { 'merge' }
+       let(:expected_rows) do
+         [
+diff --git a/spec/requests/cache_spec.rb b/spec/requests/cache_spec.rb
+index 19406c284b..e0a38adcc4 100644
+--- a/spec/requests/cache_spec.rb
++++ b/spec/requests/cache_spec.rb
+@@ -582,7 +582,16 @@ RSpec.describe 'Caching behavior' do
+         describe endpoint do
+           before { get endpoint }
+ 
+-          it_behaves_like 'non-cacheable error'
++          if endpoint == '/api/v1/custom_emojis'
++            # The fork answers this endpoint without authentication even in this
++            # mode: Api::V1::CustomEmojisController skips
++            # `require_authenticated_user!` unless the instance is in
++            # limited-federation mode (README deviation 11), so it succeeds
++            # instead of erroring, and still must not be publicly cached.
++            it_behaves_like 'non-cacheable response', http_success: true
++          else
++            it_behaves_like 'non-cacheable error'
++          end
+         end
+       end
+     end

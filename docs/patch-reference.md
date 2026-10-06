@@ -7,8 +7,8 @@ b3877d5b24 (glitch-soc main)
   └─ 0001-feature-reaction-list.patch        97 files   +2391 /  −92
       └─ 0002-feature-bubble-timeline.patch  60 files   +1476 /  −83
           └─ 0003-feature-gif-picker.patch   31 files    +886 /  −21
-              └─ 0004-fedi-branding-themes.patch 273 files +49742 / −113
-                  └─ 0005-fedi-compat-overlay.patch 11 files +45 / −3
+              └─ 0004-fedi-branding-themes.patch 273 files +49748 / −113
+                  └─ 0005-fedi-compat-overlay.patch 14 files +74 / −10
 ```
 
 The patches are cumulative: sizes are relative to the previous patch, not to the
@@ -173,7 +173,9 @@ SCSS themes and skins:
   `spec/workers/unreact_worker_spec.rb` (`RSpec.describe`),
   `spec/services/{react,unreact}_service_spec.rb` (`:inline_jobs`),
   `spec/policies/status_policy_spec.rb` (`Fabricate(:status_reaction)`) and
-  `spec/models/notification_spec.rb` (reaction expectation).
+  `spec/models/notification_spec.rb` (reaction expectation);
+  `spec/requests/api/v1/statuses/reactions_controller_spec.rb` is additionally
+  rewritten as a request spec on the real routes.
   Note what is *not* here: `Dockerfile` and `eslint.config.mjs` are 0005, and
   `streaming/index.js` and `app/models/account.rb` are 0002 — glitch-soc changed
   those files too (except `streaming/index.js`, which 0002 owns for its bubble
@@ -182,8 +184,8 @@ SCSS themes and skins:
 ## 0005 — `fedi/compat-overlay`
 
 Where glitch-soc's evolution since the fork's merge point had to be re-applied to a
-file the fork also changes, plus the lint/type fixes for files the fork does not
-touch at all. Eleven modified files, no new ones:
+file the fork also changes, plus the fixes for files the fork does not touch at all.
+Fourteen modified files, no new ones:
 
 | File | Change |
 |---|---|
@@ -195,6 +197,8 @@ touch at all. Eleven modified files, no new ones:
 | `app/javascript/flavours/glitch/components/scrollable_list/index.jsx`, `app/javascript/mastodon/components/scrollable_list/index.jsx` | `jsdoc/reject-any-type`: `@param {*} props` → `@param {{ scrollKey: string }} props` |
 | `app/javascript/mastodon/components/status/legacy/content.jsx` | `jsdoc/reject-any-type`: `@param {any} status` → `@param {import('immutable').Map<string, unknown>} status` |
 | `app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx`, `app/javascript/flavours/glitch/features/notifications/components/pill_bar_button.jsx` | `react/button-has-type`: added the explicit `type='button'` |
+| `spec/requests/cache_spec.rb` | under `DISALLOW_UNAUTHENTICATED_API_ACCESS`, `/api/v1/custom_emojis` succeeds in this fork instead of erroring (README deviation 11), so the expectation for that endpoint says so |
+| `spec/models/form/import_spec.rb`, `spec/controllers/admin/export_domain_blocks_controller_spec.rb` | build CSV fixture paths from `file_fixture_path` so the fork's root-level `domain_blocks.csv` cannot shadow `spec/fixtures/files/domain_blocks.csv` (README deviation 12) |
 
 The remaining three lint fixes are folded into the patch that owns the file:
 `features/gif_modal/index.tsx` (0003, dropped the now-unused inline
@@ -217,8 +221,9 @@ patch, by these rules:
    linters, go to **0005** (they are among the 6 deviations the fork comparison
    reports separately);
 5. later fixes found by running the checks (the runtime renames, lint findings and
-   broken specs of README deviations 8–10) stay in the patch that already owns the
-   file, even where the file is a fork-only one.
+   broken specs of README deviations 8–12) stay in the patch that already owns the
+   file, even where the file is a fork-only one; if the fork does not touch the file
+   at all, the fix goes to **0005**.
 
 Consequences worth knowing when rebasing:
 

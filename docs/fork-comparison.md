@@ -71,28 +71,32 @@ For `.base-commit` `b3877d5b24`, fork `origin/dev` `b416d280e0`, merge point
   differing                  : 81        (63 theme SCSS + 18 code, see README)
 
 ==> Result vs fork
-  differing paths in total              : 803
+  differing paths in total              : 806
   modified by glitch-soc since the merge: 620
   added by glitch-soc                   : 77
   removed by glitch-soc                 : 19
-  deviations (not glitch-soc-driven)    : 87
+  deviations (not glitch-soc-driven)    : 90
   warn  the fork customised config/vite/plugin-sw-locales.ts, which glitch-soc
         renamed to config/vite/plugin-sw-locales.mts (see Deviations in README.md)
-  warn  6 deviation(s) are in files the fork does not change — patch-set
+  warn  9 deviation(s) are in files the fork does not change — patch-set
         additions, check they are intentional
 ```
 
-Read it as: 803 paths differ from `dev`; 716 of them are glitch-soc's own work
-(620 modified, 77 added, 19 removed, renames counted as both), and 87 are
-deviations documented in the README — 81 in files only the fork touches, plus 6 in
-files neither the fork nor glitch-soc changed, which only the patch set edits. The 6
+Read it as: 806 paths differ from `dev`; 716 of them are glitch-soc's own work
+(620 modified, 77 added, 19 removed, renames counted as both), and 90 are
+deviations documented in the README — 81 in files only the fork touches, plus 9 in
+files neither the fork nor glitch-soc changed, which only the patch set edits. The 9
 are the five lint/type fixes (`flavours/glitch/components/scrollable_list/index.jsx`,
 `flavours/glitch/features/local_settings/navigation/item/index.jsx`,
 `flavours/glitch/features/notifications/components/pill_bar_button.jsx`,
 `mastodon/components/scrollable_list/index.jsx`,
-`mastodon/components/status/legacy/content.jsx`) and
-`spec/services/fan_out_on_write_service_spec.rb`, where the patch set adds the
-fan-out spec cases (README deviation 1).
+`mastodon/components/status/legacy/content.jsx`),
+`spec/services/fan_out_on_write_service_spec.rb` (the fan-out spec cases, README
+deviation 1), and the three upstream specs the fork's behaviour and its root-level
+`domain_blocks.csv` forced us to adjust (`spec/requests/cache_spec.rb`,
+`spec/models/form/import_spec.rb`,
+`spec/controllers/admin/export_domain_blocks_controller_spec.rb`; deviations
+11–12).
 
 The 81 fork-only deviations are 63 theme SCSS files (formatter normalisation, README
 deviation 5) plus 18 code, test and locale files: the fan-out service (deviation 1),

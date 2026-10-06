@@ -6,7 +6,7 @@ from a stack of five patches.
 
 - **Base commit**: `.base-commit` — glitch-soc `main`
   `b3877d5b245c6fa65f1a7639fa5593c6b6ade8fc` (2026-10-05)
-- **Result**: 5 patches, 467 files changed, +54538 / −310 against that commit
+- **Result**: 5 patches, 470 files changed, +54573 / −317 against that commit
 - **Licence**: AGPL-3.0, like glitch-soc and Mastodon — see [LICENSE](LICENSE)
 
 ## Why this exists
@@ -85,9 +85,9 @@ scripts/check-ruby-syntax.mjs    parse changed Ruby files without Ruby (Prism/WA
 | 2 | `feature/bubble-timeline` | 60 | Bubble timeline (TheEssem): bubble-domain API + admin UI, `BUBBLE` feed and column, streaming channels, fan-out, settings, 3 migrations — plus the fork's per-timeline boost/reply settings wired through fan-out and their specs |
 | 3 | `feature/gif-picker` | 31 | Tenor/Klipy GIF search (TheEssem): GIF API client + picker UI, `gif_search` in the instance serializers, locales |
 | 4 | `fedi/branding-themes` | 273 | The operator's own customisations: sign-in banner, local-settings page, qrtool decoder, custom modern/gekka/sakura/tangerine UI themes and skins, reject-pattern settings, locale additions, 3 migrations — plus the runtime, lint and spec fixes of deviations 8–10 |
-| 5 | `fedi/compat-overlay` | 11 | Reconciliation with glitch-soc and with the repo's own linters: Elk footer link, Docker `qrtool` stage, `ja.yml` blurhash strings, `en.json` reaction notification, `eslint.config.mjs`, and lint fixes for five files the fork does not otherwise touch |
+| 5 | `fedi/compat-overlay` | 14 | Reconciliation with glitch-soc and with the repo's own check suite: Elk footer link, Docker `qrtool` stage, `ja.yml` blurhash strings, `en.json` reaction notification, `eslint.config.mjs`, lint fixes for five files the fork does not otherwise touch, and three upstream specs adjusted for the fork's behaviour and its root-level `domain_blocks.csv` |
 
-Per-patch sizes are 2391/+92−, 1476/+83−, 886/+21−, 49742/+113− and 45/+3−
+Per-patch sizes are 2391/+92−, 1476/+83−, 886/+21−, 49748/+113− and 74/+10−
 (lines added/removed). The split is by feature or customisation, so an upstream
 rebase conflicts on the furthest patch that touches a file. Shared configuration
 that serves more than one feature (`config/settings.yml`, `db/schema.rb`,
@@ -254,8 +254,13 @@ merge. These are the intentional differences from `dev` itself:
      `config/locales-glitch/simple_form.fr.yml` — sorted one key
      (`bin/i18n-tasks check-normalized`).
 10. **Fixes to the fork's own specs**, all pre-existing in `dev`:
-   - `spec/requests/api/v1/statuses/reactions_controller_spec.rb`,
-     `spec/validators/status_reaction_validator_spec.rb`,
+   - `spec/requests/api/v1/statuses/reactions_controller_spec.rb` — rewritten as a
+     request spec using the real routes (`POST /api/v1/statuses/:status_id/react/:id`
+     and `/unreact/:id`); it used to be written as a controller spec (`post :create`)
+     under `spec/requests/`, which RSpec types as a request spec, and it called a
+     `body_as_json` helper that no longer exists. The unreact examples need
+     `:inline_jobs` because `UnreactWorker` removes the reaction asynchronously.
+   - `spec/validators/status_reaction_validator_spec.rb`,
      `spec/workers/unreact_worker_spec.rb` — used bare `describe`, which
      `spec_helper`'s `disable_monkey_patching!` removed; the files could not load at
      all. Now `RSpec.describe`.
@@ -271,6 +276,21 @@ merge. These are the intentional differences from `dev` itself:
    - `spec/models/notification_spec.rb` — added a reaction notification to the
      inputs without adding it to the `contain_exactly` expectation; it now has a
      `reaction_attributes` matcher.
+11. **`/api/v1/custom_emojis` stays public when unauthenticated API access is
+   disallowed** — that is the fork's behaviour, and it is now asserted instead of
+   contradicted: `spec/requests/cache_spec.rb` (patch 5) expects a successful,
+   non-publicly-cached response for that endpoint under
+   `DISALLOW_UNAUTHENTICATED_API_ACCESS=true`, where upstream expects an error. The
+   controller's `skip_before_action … unless: limited_federation_mode?` (deviation 8)
+   is what implements it.
+12. **Three upstream specs resolve their CSV fixtures explicitly** (patch 5):
+   `spec/models/form/import_spec.rb` and
+   `spec/controllers/admin/export_domain_blocks_controller_spec.rb` passed bare
+   fixture names to `fixture_file_upload`, which prefers a path relative to the
+   working directory when one exists — and this repository keeps the operator's
+   `domain_blocks.csv` at its root (796 rows) next to the 3-row
+   `spec/fixtures/files/domain_blocks.csv`. They now build the path from
+   `file_fixture_path`, so the fixture always wins.
 
 ## Notes and caveats
 
@@ -296,31 +316,15 @@ Behaviour worth knowing before deploying this tree:
   whose `settings` table has the old reblog key set to `true` used to stream boosts
   and will stop until the two new toggles are enabled in **Administration →
   Settings**.
-- **Ruby-side checks: run, and green except for three documented items.** Ruby
-  4.0.7, PostgreSQL 18 and Redis were installed for this (see
-  [docs/verification.md](docs/verification.md) for the exact commands), and
-  `bin/rails db:migrate` from an empty database, a `db:schema:dump` comparison,
-  `bin/rubocop`, `bin/haml-lint`, `bin/i18n-tasks` and `bundle exec rspec` all run.
-  `db:schema.rb` is byte-identical to a fresh dump, and the linters pass. RSpec is
-  7934 examples with 14 failures, none of them in the patch set's application code:
-  - 11 in `spec/requests/api/v1/statuses/reactions_controller_spec.rb`, which is
-    written as a controller spec (`post :create`) but lives under `spec/requests/`,
-    so RSpec types it as a request spec and Rack::Test rejects the Symbol path. It
-    needs to move to `spec/controllers/` or be rewritten as a request spec; it is
-    carried over from `dev` unchanged.
-  - 2 in `spec/models/form/import_spec.rb` and
-    `spec/controllers/admin/export_domain_blocks_controller_spec.rb`: the fork's
-    repository-root `domain_blocks.csv` (796 real domains) shadows
-    `spec/fixtures/files/domain_blocks.csv` (3 rows), so the fixtures resolve to the
-    wrong file. Moving the root CSV away makes both files pass (98 examples, 0
-    failures); the fix is to rename the root file or set `file_fixture_path`.
-  - 1 in `spec/requests/cache_spec.rb`: with
-    `DISALLOW_UNAUTHENTICATED_API_ACCESS=true`, the fork deliberately keeps
-    `/api/v1/custom_emojis` public (deviation 8), which is exactly what that
-    upstream expectation forbids.
-  Two `ActivityPub::ObjectIntegrityProof` ML-DSA examples failed in one run and
-  passed in another: they depend on OpenSSL's post-quantum support and are
-  environment-dependent, not code-dependent.
+- **Ruby-side checks: run, and green.** Ruby 4.0.7, PostgreSQL 18 and Redis are
+  needed (see [docs/verification.md](docs/verification.md) for the exact commands);
+  with them, `bin/rails db:migrate` from an empty database, a `db:schema:dump`
+  comparison, `bin/rubocop`, `bin/haml-lint`, the `bin/i18n-tasks` set and
+  `bin/flatware rspec` all run and pass: `db:schema.rb` is byte-identical to a fresh
+  dump, the linters report nothing, and RSpec is 7934 examples with 0 failures
+  (4 pending, upstream's own). Two `ActivityPub::ObjectIntegrityProof` ML-DSA
+  examples depend on OpenSSL's post-quantum support and failed in one run and
+  passed in another, so treat them as environment-dependent.
 
 ## Provenance
 
@@ -347,10 +351,11 @@ commit):
 
 Of the fork's 464 changed files, all 464 survive. Of the 421 files that only the
 fork touches, 340 are byte-identical to `dev` and the other 81 are fork-only
-deviations above (63 theme SCSS plus 18 code and spec files); 6 further deviations
+deviations above (63 theme SCSS plus 18 code and spec files); 9 further deviations
 are files neither the fork nor glitch-soc changed, which only the patch set edits —
-the five lint/type fixes and the fan-out spec cases (deviation 1). 803 paths in
-total differ from `dev`: 620 modified, 77 added and 19 removed by glitch-soc since
-the fork's last merge, plus those 87 deviations. The fork's own changes are in
-patches 1–4; patch 5 is the reconciliation layer on top.
+the five lint/type fixes, the fan-out spec cases (deviation 1) and the three specs
+of deviations 11–12. 806 paths in total differ from `dev`: 620 modified, 77 added
+and 19 removed by glitch-soc since the fork's last merge, plus those 90 deviations.
+The fork's own changes are in patches 1–4; patch 5 is the reconciliation layer on
+top.
 [docs/fork-comparison.md](docs/fork-comparison.md) has the full breakdown.

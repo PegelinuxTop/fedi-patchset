@@ -143,7 +143,7 @@ Redis 8.10.2 and StGit 2.6.1.
 | `setup.sh` (git am) from a fresh clone | applies, tree identical to the reference (`7727c6148a`) |
 | `setup.sh --stg` | same tree, stack `0001…0005` |
 | `lint-patches.sh` with `BASE_REPO` | all checks passed; all 5 patches apply cleanly |
-| `compare-with-fork.sh` | 464/464 fork changes preserved, 0 lost; 803 differing paths, 87 documented deviations, 0 unexplained |
+| `compare-with-fork.sh` | 464/464 fork changes preserved, 0 lost; 806 differing paths, 90 documented deviations, 0 unexplained |
 | `check-ruby-syntax.mjs` | 125 changed `.rb`/`.rake` files, 0 syntax errors |
 | JSON/YAML parse | 34 changed files, 0 invalid |
 | `yarn format:check` | 2140 files, all correctly formatted |
@@ -158,7 +158,7 @@ Redis 8.10.2 and StGit 2.6.1.
 | `bin/haml-lint` | 319 files inspected, 0 lints |
 | `bin/i18n-tasks check-normalized` / `unused -l en` / `missing -t used -l en` / `check-consistent-interpolations` | all pass |
 | `bin/rake repo:check_locales_files` | exit 0 (prints a note about upstream locale files that are not enabled) |
-| `bin/flatware rspec` | 7934 examples, 14 failures, 4 pending — see below |
+| `bin/flatware rspec` | 7934 examples, 0 failures, 4 pending |
 
 The JavaScript-side results were produced before the Ruby fixes landed; those fixes
 touch no JS/TS/CSS file, so they still describe this revision.
@@ -214,21 +214,25 @@ Gotchas:
 - the environment here also lacked `libheif` and `libopenslide` for libvips; that
   only produces warnings and can affect HEIF/OpenSlide media specs.
 
-### The 14 remaining RSpec failures
+### What the run had to fix first
 
-None of them is in the patch set's application code; all four causes are carried over
-from `dev` (the corresponding files are byte-identical to `dev` except where a
-deviation says otherwise):
+The first full run was 34 failures. They are all fixed in the patch set now, and none
+of them was caused by the merge itself: they are `dev`'s own bugs, or upstream
+expectations that `dev`'s files contradict. The breakdown, so a future rebase
+recognises them (details in the README deviations):
 
-| Failures | Cause |
+| Failures | Cause and fix |
 |---|---|
-| 11 in `spec/requests/api/v1/statuses/reactions_controller_spec.rb` | written as a controller spec (`post :create`, `allow(controller)`) but placed under `spec/requests/`, so `infer_spec_type_from_file_location!` types it as a request spec and Rack::Test rejects the Symbol path. Move it to `spec/controllers/` or rewrite it as a request spec. |
-| 2 in `spec/models/form/import_spec.rb`, `spec/controllers/admin/export_domain_blocks_controller_spec.rb` | the fork's repository-root `domain_blocks.csv` (796 real domains) shadows `spec/fixtures/files/domain_blocks.csv` (3 rows), so the fixtures resolve to the wrong file. Verified: moving the root CSV away makes both files pass (98 examples, 0 failures). Rename the root file or set `file_fixture_path`. |
-| 1 in `spec/requests/cache_spec.rb` | with `DISALLOW_UNAUTHENTICATED_API_ACCESS=true` the fork deliberately keeps `/api/v1/custom_emojis` public (README deviation 8), which that upstream expectation forbids. |
+| 17 | `lib/paperclip/qr_decoder.rb` called `log(...)`, which `Paperclip::Processor` does not define, so media post-processing raised whenever `qrtool` was missing. Fixed with `Rails.logger.warn` (deviation 8). |
+| 11 | `spec/requests/api/v1/statuses/reactions_controller_spec.rb` was written as a controller spec but lives under `spec/requests/`, and called a `body_as_json` helper that no longer exists. Rewritten as a request spec on the real routes, with `:inline_jobs` for the asynchronous unreact (deviation 10). |
+| 2 | `spec/models/form/import_spec.rb`, `spec/controllers/admin/export_domain_blocks_controller_spec.rb`: bare fixture names resolved against the working directory, where the fork's root `domain_blocks.csv` shadows the fixture (deviation 12). |
+| 2 | `spec/services/{react,unreact}_service_spec.rb`: missing the `:inline_jobs` tag the rest of the suite uses (deviation 10). |
+| 2 | `spec/requests/cache_spec.rb`: with `DISALLOW_UNAUTHENTICATED_API_ACCESS=true` the fork keeps `/api/v1/custom_emojis` public (deviation 11); the expectation now says so. |
+| 3 | Spec files that used bare `describe` under `disable_monkey_patching!`, plus `status_policy_spec`'s `Fabricate(:react)` and the validator spec's `status.reactions.build` (deviation 10). |
 
-Two `ActivityPub::ObjectIntegrityProof` ML-DSA examples failed in one run and passed
-in the next: they depend on OpenSSL's post-quantum support, so they are
-environment-dependent.
+Two `ActivityPub::ObjectIntegrityProof` ML-DSA examples depend on OpenSSL's
+post-quantum support and failed in one run and passed in the next, so they are
+environment-dependent rather than code-dependent.
 
 ## Not verified here
 
