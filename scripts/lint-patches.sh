@@ -8,9 +8,10 @@
 #   2. series and patches/ agree, and the numeric prefixes are ascending.
 #   3. no patch contains conflict markers or looks like a raw merge diff.
 #   4. every patch parses as a mail patch (From/Subject/--- headers).
-#   5. migrations added by the patches have unique timestamps and names, never
-#      collide with a migration that already exists at the base commit, and no
-#      patch modifies an existing migration file.
+#   5. migrations added by the patches (db/migrate and db/post_migrate) have
+#      unique timestamps and names, never collide with a migration that already
+#      exists at the base commit, and no patch modifies an existing migration
+#      file.
 #   6. (optional) the whole series applies cleanly: set BASE_REPO to a clone of
 #      glitch-soc that contains .base-commit and it will be applied in a
 #      throw-away worktree.
@@ -84,7 +85,7 @@ for patch in "${series_patches[@]}"; do
   done < <(awk '
     /^diff --git / {
       path=""
-      if (match($0, /a\/db\/migrate\/[^ ]+/)) {
+      if (match($0, /a\/db\/(post_)?migrate\/[^ ]+/)) {
         p = substr($0, RSTART + 2, RLENGTH - 2)
         path = p
       }
@@ -101,7 +102,7 @@ for patch in "${series_patches[@]}"; do
   done < <(awk '
     /^diff --git / {
       path=""; isnew=0
-      if (match($0, /a\/db\/migrate\/[^ ]+/)) {
+      if (match($0, /a\/db\/(post_)?migrate\/[^ ]+/)) {
         p = substr($0, RSTART + 2, RLENGTH - 2)
         n = substr($0, RSTART, RLENGTH)
         path = p
@@ -149,13 +150,15 @@ else
   # Collisions with migrations that already exist at the base commit.
   base_repo="${BASE_REPO:-$REPO_DIR}"
   if [[ "$BASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] && git -C "$base_repo" cat-file -e "${BASE_COMMIT}^{commit}" 2>/dev/null; then
-    base_migrations="$(git -C "$base_repo" ls-tree -r --name-only "$BASE_COMMIT" -- db/migrate | xargs -r -n1 basename)"
+    base_migrations="$(git -C "$base_repo" ls-tree -r --name-only "$BASE_COMMIT" -- db/migrate db/post_migrate | xargs -r -n1 basename)"
+    collided=0
     for base in $base_migrations; do
       if [[ -n "${seen_timestamp[${base:0:14}]:-}" ]]; then
         fail "migration ${base} already exists at $BASE_COMMIT (timestamp collision)"
+        collided=1
       fi
     done
-    ok "no migration timestamp collides with the base commit"
+    [[ "$collided" == "1" ]] || ok "no migration timestamp collides with the base commit"
   else
     warn "base commit not available locally; skipped the base-migration collision check"
   fi

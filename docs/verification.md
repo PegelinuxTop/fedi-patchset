@@ -14,9 +14,10 @@ BASE_REPO=~/src/mastodon scripts/lint-patches.sh
 
 Checks: `.base-commit` is a full SHA; `series` and `patches/` agree and are
 ordered; every patch parses as a mail patch; no conflict markers; no existing
-migration is modified; the fork's migrations have unique timestamps and names and
-none collides with a migration at the base commit; and the whole series applies to
-`.base-commit` in a throwaway worktree.
+migration is modified; the fork's migrations — both `db/migrate` and
+`db/post_migrate` — have unique timestamps and names and none collides with a
+migration at the base commit; and the whole series applies to `.base-commit` in a
+throwaway worktree.
 
 Expected:
 

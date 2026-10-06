@@ -26,16 +26,23 @@ modified.
   `app/serializers/activitypub/{emoji_reaction,undo_emoji_reaction}_serializer.rb`,
   `app/validators/status_reaction_validator.rb`,
   `app/presenters/status_reaction_presenter.rb`, notification-mailer views,
-  material icons, glitch UI (`actions/interactions.js`, `reducers/status_reactions.js`,
+  material icons, glitch UI (`reducers/status_reactions.js`,
   `components/status/legacy/reactions.tsx`, `features/reactions/index.tsx`,
-  `features/notifications_v2/components/notification_reaction.tsx`, …), and specs.
+  `features/notifications_v2/components/notification_reaction.tsx`,
+  `api_types/reaction.ts`, `models/reaction.ts`, …), and specs.
 - **Migrations**: `20221124114030_create_status_reactions`,
-  `20240411044156_add_reaction_count_to_status_stat`.
+  `20240411044156_add_reaction_count_to_status_stat`, and the two post-migrations
+  `post_migrate/20250305023754_add_reaction_counts_to_status_stat`,
+  `post_migrate/20260520184138_normalize_status_reaction_variation_selectors`.
 - **Also touches**: `config/routes/api.rb`, `config/locales-glitch/en.yml`,
-  `config/locales-glitch/simple_form.en.yml`, `app/models/notification.rb`,
+  `config/locales-glitch/simple_form.en.yml`, `.env.production.sample`,
+  `app/models/notification.rb`, `app/models/status.rb`,
   `app/models/concerns/account/associations.rb`,
-  `app/services/delete_account_service.rb`, the instance serializers, and the
-  status/action-bar components in both flavours.
+  `app/models/concerns/account/interactions.rb`,
+  `app/services/delete_account_service.rb`, the instance serializers, the
+  notification serializers/models/settings (glitch and vanilla), glitch
+  `actions/interactions.js` (the react/unreact actions) and the status/action-bar
+  components in both flavours.
 - **Carries shared configuration**: no (`config/settings.yml`, `db/schema.rb` and
   `app/models/form/admin_settings.rb` are carried by 0002; see Ownership).
 
@@ -55,10 +62,13 @@ files, 39 modified.
 - **Also touches**: `streaming/index.js` (bubble channels, bubble feed access and
   the bubble-domain filter), `app/services/fan_out_on_write_service.rb`,
   `app/services/batched_remove_status_service.rb`,
-  `app/controllers/api/v1/timelines/public_controller.rb`, `app/models/account.rb`
-  (the `bubble_only` scope), the glitch firehose/compose/navigation/hashtag
-  components, `config/routes/admin.rb`, `config/routes/web_app.rb`,
-  `config/navigation.rb`, `config/locales/en.yml`.
+  `app/services/remove_status_service.rb`,
+  `app/controllers/api/v1/timelines/{public,topic}_controller.rb`,
+  `app/models/account.rb` (the `bubble_only` scope), the feed scopes
+  (`app/models/{public,tag,link}_feed.rb`), the glitch
+  firehose/about/compose/navigation/hashtag components and the streaming
+  actions/reducers, `config/routes/admin.rb`, `config/routes/web_app.rb`,
+  `config/navigation.rb`, `config/locales/en.yml`, `lib/mastodon/cli/main.rb`.
 - **Carries shared configuration**: `config/settings.yml` (bubble feed access,
   `show_bubble_domains`, `visible_reactions`, `reject_pattern`, `reject_blurhash`,
   and the four `show_{reblogs,replies}_in_{local,federated}_timelines` keys),
@@ -77,14 +87,21 @@ files, 39 modified.
 TheEssem's GIF search. 16 new files, 15 modified.
 
 - **New**: `app/lib/gif_service.rb` + `gif_service/{tenor,klipy}.rb`,
-  `app/services/search_gifs_service.rb`, `app/lib/gif_results.rb` (models),
+  `app/services/search_gifs_service.rb`, `app/models/gif_results.rb`,
   `app/serializers/rest/gif_results_serializer.rb`,
   `app/controllers/api/v1/gifs_controller.rb`, `config/gifs.yml`, the Tenor/Klipy
-  SVG marks in `public/`, glitch `features/gif_modal/*` and models/types, specs.
+  SVG marks in `public/` and the glitch `features/gif_modal/*` components,
+  `api_types/gif.ts` and `models/gif.ts`. No new specs.
 - **Also touches**: `config/routes/api.rb`, `config/application.rb`,
-  `config/locales-glitch/en.yml`, `app/javascript/flavours/glitch/locales/en.json`,
+  `config/locales-glitch/en.yml`,
+  `app/javascript/flavours/glitch/locales/en.json`,
   `app/serializers/rest/instance_serializer.rb`,
-  `app/javascript/flavours/glitch/features/ui/components/modal_root.jsx`.
+  `app/lib/content_security_policy.rb`,
+  `app/javascript/{flavours/glitch,mastodon}/features/ui/components/modal_root.jsx`,
+  the glitch compose upload button (`features/compose/components/upload_button.jsx`,
+  `containers/upload_button_container.js`, `actions/compose.js`,
+  `reducers/compose.js`), `api_types/instance.ts` and
+  `app/javascript/flavours/glitch/styles/mastodon/components.scss`.
 - **Carries shared configuration**: no.
 
 ## 0004 — `fedi/branding-themes`
@@ -99,13 +116,21 @@ SCSS themes and skins:
   `modern-glitch-fixes.scss`, `modern-urusai-fixes.scss`, `urusai-fixes.scss`;
 - matching skins under `app/javascript/skins/{glitch,vanilla}/**` (`common.scss`,
   `names.yml`);
-- the sign-in banner (`features/ui/components/sign_in_banner.jsx`), footers, the
-  local-settings page, About page, and the theme-related React glue.
+- the sign-in banner (`features/ui/components/sign_in_banner.jsx`), the
+  local-settings page (`features/local_settings/page/**`) and the theme-related
+  React glue (both flavours' `icon_button`, `timeline_hint`,
+  `autosuggest_textarea`, `compose_form`, `notification_*`, `status/legacy`,
+  `compare_history_modal`, …; the fork's other new components are under "Also
+  adds"). The About page and the footers are *not* here — glitch-soc changed
+  `features/about/index.jsx` (0002) and both `link_footer.tsx` (0005).
 - **Migrations**: `20221218015350_fix_foreign_keys_status_reactions`,
   `20230215074425_move_emoji_reaction_settings`,
   `20250518031405_remove_quote_id_from_statuses`.
-- **Also touches**: 65 modified files, of which three are theme SCSS
-  (`styles/custom_common.scss`, `styles/modern.scss`, …) covered above. The rest:
+- **Also touches**: 65 modified files. Three of them are SCSS glitch-soc already
+  had and the fork tweaks
+  (`app/javascript/flavours/glitch/styles/mastodon/glitch/doodle.scss`,
+  `app/javascript/styles/mastodon/admin.scss`,
+  `app/javascript/styles/mastodon/rtl.scss`). The rest:
   `Gemfile.lock` (bundler platforms), `stylelint.config.js`, `README.md`,
   `.gitignore`, the two `.github/workflows/` files, the icon PNGs under
   `app/javascript/icons/`, `config/environments/production.rb`,
@@ -118,13 +143,23 @@ SCSS themes and skins:
   `icon_button`, `timeline_hint`, `autosuggest_textarea`, `compose_form`,
   `notification_*` and `status/legacy` components, glitch
   `local_settings/page/**`, `compare_history_modal`, …).
-  `app/javascript/flavours/glitch/locales/{de,fr}.js`, the qrtool files
-  (`config/initializers/qrtool.rb`, `lib/paperclip/qr_decoder.rb`),
-  `.stylelintignore`, `domain_blocks.csv` and the skin `names.yml` files are among
-  the 208 *new* files.
+- **Also adds** the 208 new files: the theme SCSS (163 of them, under
+  `app/javascript/flavours/glitch/styles/**` and `app/javascript/styles/**`), the
+  skins' `names.yml` / `common.scss`, the fork's own code
+  (`app/javascript/flavours/glitch/features/ui/components/sign_in_banner.jsx`, the
+  glitch locale overlays `app/javascript/flavours/glitch/locales/{de,fr}.js`,
+  `app/javascript/flavours/glitch/components/status_reactions.tsx`,
+  `features/explore/components/author_link.jsx` in both flavours,
+  `features/ui/util/identity_consumer.jsx`, `app/javascript/styles/birdsite.css`,
+  `config/initializers/qrtool.rb`, `lib/paperclip/qr_decoder.rb`,
+  `app/validators/regexp_syntax_validator.rb`,
+  `app/workers/scheduler/admin/dashboard_cache_warmer_scheduler.rb`,
+  `.stylelintignore`, `domain_blocks.csv`), its new Ruby specs (`spec/**`) and the
+  three migrations below.
   Note what is *not* here: `Dockerfile` and `eslint.config.mjs` are 0005, and
   `streaming/index.js` and `app/models/account.rb` are 0002 — glitch-soc changed
-  those files too, so their fork hunks live in the reconciliation patch.
+  those files too (except `streaming/index.js`, which 0002 owns for its bubble
+  channels), so their fork hunks live in another patch.
 
 ## 0005 — `fedi/compat-overlay`
 
@@ -187,5 +222,7 @@ Consequences worth knowing when rebasing:
   five lint-fix files land in **0005** — `Dockerfile`, `eslint.config.mjs` and
   both `link_footer.tsx` are files glitch-soc also changed, which is why their
   fork hunks cannot live in 0004;
-- `streaming/index.js` and `app/models/account.rb` also belong to **0002** for the
-  same reason (glitch-soc changed them, so they are not part of 0004).
+- `app/models/account.rb` and `streaming/index.js` are **0002** as well: `account.rb`
+  carries the bubble `bubble_only` scope and glitch-soc changed the file too, and
+  `streaming/index.js` holds the bubble channels and the bubble-domain filter,
+  which is why 0002 owns those hunks rather than 0004.

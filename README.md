@@ -81,10 +81,10 @@ scripts/check-ruby-syntax.mjs    parse changed Ruby files without Ruby (Prism/WA
 
 | # | Patch | Files | Contents |
 |---|-------|-------|----------|
-| 1 | `feature/reaction-list` | 97 | Emoji reactions (TheEssem): status-reaction API, service layer, federation, notifications, reaction list UI, notification/admin settings, 2 migrations |
+| 1 | `feature/reaction-list` | 97 | Emoji reactions (TheEssem): status-reaction API, service layer, federation, notifications, reaction list UI, notification/admin settings, 2 migrations + 2 post-migrations |
 | 2 | `feature/bubble-timeline` | 60 | Bubble timeline (TheEssem): bubble-domain API + admin UI, `BUBBLE` feed and column, streaming channels, fan-out, settings, 3 migrations — plus the fork's per-timeline boost/reply settings wired through fan-out and their specs |
 | 3 | `feature/gif-picker` | 31 | Tenor/Klipy GIF search (TheEssem): GIF API client + picker UI, `gif_search` in the instance serializers, locales |
-| 4 | `fedi/branding-themes` | 273 | The operator's own customisations: sign-in banner, footers, custom modern/gekka/sakura/tangerine UI themes and skins, reject-pattern settings, locale additions, 3 migrations |
+| 4 | `fedi/branding-themes` | 273 | The operator's own customisations: sign-in banner, local-settings page, qrtool decoder, custom modern/gekka/sakura/tangerine UI themes and skins, reject-pattern settings, locale additions, 3 migrations |
 | 5 | `fedi/compat-overlay` | 11 | Reconciliation with glitch-soc and with the repo's own linters: Elk footer link, Docker `qrtool` stage, `ja.yml` blurhash strings, `en.json` reaction notification, `eslint.config.mjs`, and lint fixes for five files the fork does not otherwise touch |
 
 Per-patch sizes are 2391/+92−, 1474/+83−, 891/+21−, 49717/+112− and 45/+3−
@@ -103,14 +103,17 @@ individually. See [docs/patch-reference.md](docs/patch-reference.md).
 
 ### Migrations
 
-The eight migrations the fork adds are kept verbatim — original filenames,
-timestamps and class names — and no existing migration is modified. None of their
-timestamps collide with a migration present at the base commit, which
-`scripts/lint-patches.sh` enforces.
+The ten migrations the fork adds — eight under `db/migrate` and two under
+`db/post_migrate` — are kept verbatim, with their original filenames, timestamps
+and class names, and no existing migration is modified. None of their timestamps
+collides with a migration present at the base commit, which
+`scripts/lint-patches.sh` enforces for both directories.
 
 ```
 0001  20221124114030_create_status_reactions.rb
 0001  20240411044156_add_reaction_count_to_status_stat.rb
+0001  post_migrate/20250305023754_add_reaction_counts_to_status_stat.rb
+0001  post_migrate/20260520184138_normalize_status_reaction_variation_selectors.rb
 0002  20240114042123_create_bubble_domains.rb
 0002  20251018223804_add_bubble_timeline_preview_setting.rb
 0002  20251024193240_add_bubble_timeline_topic_preview_setting.rb
