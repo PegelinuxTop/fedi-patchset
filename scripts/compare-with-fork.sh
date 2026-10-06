@@ -72,6 +72,7 @@ if [[ -z "$FORK" ]]; then
     FORK="$REPO_DIR/../fedi.my.id"
   else
     echo "compare-with-fork.sh: no --fork given and $REPO_DIR/../fedi.my.id does not exist" >&2
+    echo "                   pass --fork PATH pointing at a fedi.my.id clone" >&2
     exit 1
   fi
 fi
