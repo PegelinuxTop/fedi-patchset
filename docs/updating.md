@@ -123,11 +123,20 @@ cd ~/src/fedi.my.id
 yarn format:check && yarn typecheck && yarn lint:css
 NODE_OPTIONS=--max-old-space-size=5120 node_modules/.bin/eslint --cache --report-unused-disable-directives --max-warnings 0 .
 yarn test:js
+
+# Ruby side (needs Ruby 4.0.7, PostgreSQL and Redis — see verification.md)
+bin/rubocop && bin/haml-lint
+bin/i18n-tasks check-normalized && bin/i18n-tasks unused -l en
+bin/i18n-tasks missing -t used -l en && bin/i18n-tasks check-consistent-interpolations
+bin/rake repo:check_locales_files
+bin/rails db:create db:migrate && bin/rails db:schema:dump && git diff --stat db/schema.rb
+bin/flatware fan bin/rails db:test:prepare && bin/flatware rspec
 ```
 
 See [verification.md](verification.md) for what each of those proves, the expected
-values, and the Ruby-side checks that need a full Ruby environment
-(`bin/rubocop`, `bin/i18n-tasks …`, `bin/rails db:migrate`, `bundle exec rspec`).
+values, and the environment the Ruby-side checks need (Ruby 4.0.7, PostgreSQL and
+Redis; `bin/rubocop`, `bin/haml-lint`, `bin/i18n-tasks …`, `bin/rails db:migrate`,
+`bin/flatware rspec`).
 
 ## 5. Before you push
 
@@ -141,6 +150,10 @@ values, and the Ruby-side checks that need a full Ruby environment
 - [ ] the app's checks pass: `yarn format:check`, `yarn typecheck`, `yarn lint:css`
       and ESLint over the whole repository (all clean for this revision), plus
       `yarn test:js`
+- [ ] the Ruby-side checks pass: `bin/rubocop`, `bin/haml-lint`, the
+      `bin/i18n-tasks` set, migrations + a clean `db:schema.rb` dump, and
+      `bin/flatware rspec` (14 known failures, all documented in the README's
+      caveats — a *new* failure usually means the rebase dropped upstream code)
 
 ## Troubleshooting
 

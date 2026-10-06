@@ -67,24 +67,24 @@ For `.base-commit` `b3877d5b24`, fork `origin/dev` `b416d280e0`, merge point
 
 ==> Fork-only files (glitch-soc did not touch them)
   count                      : 421
-  byte-identical to the fork : 352
-  differing                  : 69        (63 theme SCSS + 6 code, see README)
+  byte-identical to the fork : 340
+  differing                  : 81        (63 theme SCSS + 18 code, see README)
 
 ==> Result vs fork
-  differing paths in total              : 791
+  differing paths in total              : 803
   modified by glitch-soc since the merge: 620
   added by glitch-soc                   : 77
   removed by glitch-soc                 : 19
-  deviations (not glitch-soc-driven)    : 75
+  deviations (not glitch-soc-driven)    : 87
   warn  the fork customised config/vite/plugin-sw-locales.ts, which glitch-soc
         renamed to config/vite/plugin-sw-locales.mts (see Deviations in README.md)
   warn  6 deviation(s) are in files the fork does not change — patch-set
         additions, check they are intentional
 ```
 
-Read it as: 791 paths differ from `dev`; 716 of them are glitch-soc's own work
-(620 modified, 77 added, 19 removed, renames counted as both), and 75 are
-deviations documented in the README — 69 in files only the fork touches, plus 6 in
+Read it as: 803 paths differ from `dev`; 716 of them are glitch-soc's own work
+(620 modified, 77 added, 19 removed, renames counted as both), and 87 are
+deviations documented in the README — 81 in files only the fork touches, plus 6 in
 files neither the fork nor glitch-soc changed, which only the patch set edits. The 6
 are the five lint/type fixes (`flavours/glitch/components/scrollable_list/index.jsx`,
 `flavours/glitch/features/local_settings/navigation/item/index.jsx`,
@@ -94,11 +94,20 @@ are the five lint/type fixes (`flavours/glitch/components/scrollable_list/index.
 `spec/services/fan_out_on_write_service_spec.rb`, where the patch set adds the
 fan-out spec cases (README deviation 1).
 
-The 69 fork-only deviations are 63 theme SCSS files (formatter normalisation, README
-deviation 5) plus `flavours/glitch/initial_state.ts` (deviation 2),
-`streaming/index.js` (deviation 3), `app/services/fan_out_on_write_service.rb`
-(deviation 1) and three lint fixes in files the fork does not otherwise share with
-glitch-soc (`flavours/glitch/components/status/legacy/content.jsx`,
+The 81 fork-only deviations are 63 theme SCSS files (formatter normalisation, README
+deviation 5) plus 18 code, test and locale files: the fan-out service (deviation 1),
+`flavours/glitch/initial_state.ts` (2), `streaming/index.js` (3), the two files of
+deviation 8 (`api/v1/custom_emojis_controller.rb`, `lib/paperclip/qr_decoder.rb`),
+the three of deviation 9 (`app/views/admin/settings/other/show.html.haml`,
+`config/locales-glitch/en.yml`, `config/locales-glitch/simple_form.fr.yml`), the
+seven specs of deviation 10 (`spec/models/notification_spec.rb`,
+`spec/policies/status_policy_spec.rb`,
+`spec/requests/api/v1/statuses/reactions_controller_spec.rb`,
+`spec/services/{react,unreact}_service_spec.rb`,
+`spec/validators/status_reaction_validator_spec.rb`,
+`spec/workers/unreact_worker_spec.rb`) and three lint fixes in files the fork does
+not otherwise share with glitch-soc
+(`flavours/glitch/components/status/legacy/content.jsx`,
 `features/gif_modal/index.tsx`, `features/ui/components/sign_in_banner.jsx`).
 
 Two things are worth knowing about the counting:

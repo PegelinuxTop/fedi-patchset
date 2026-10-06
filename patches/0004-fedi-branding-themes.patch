@@ -1,4 +1,4 @@
-From 2b918d610b4ec5825913248ceb401d2b8cc2f247 Mon Sep 17 00:00:00 2001
+From 6043da90b342f8eac522cf1ef3394c83f33ef09d Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:18:58 +0700
 Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
@@ -250,7 +250,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  app/services/fetch_oembed_service.rb          |   14 +-
  app/validators/regexp_syntax_validator.rb     |   11 +
  app/views/admin/dashboard/index.html.haml     |    4 +-
- app/views/admin/settings/other/show.html.haml |   18 +-
+ app/views/admin/settings/other/show.html.haml |   33 +-
  .../admin/dashboard_cache_warmer_scheduler.rb |   55 +
  config/environments/production.rb             |    8 +-
  .../initializers/content_security_policy.rb   |    1 +
@@ -265,7 +265,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  lib/sanitize_ext/sanitize_config.rb           |   10 +
  spec/models/account/field_spec.rb             |    6 +-
  .../concerns/account/interactions_spec.rb     |   22 +
- spec/models/notification_spec.rb              |   23 +
+ spec/models/notification_spec.rb              |   34 +-
  spec/policies/status_policy_spec.rb           |   18 +
  .../v1/statuses/reactions_controller_spec.rb  |  114 +
  spec/services/fetch_link_card_service_spec.rb |   40 +-
@@ -278,7 +278,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  streaming/database.js                         |   62 +-
  streaming/redis.js                            |   16 +-
  stylelint.config.js                           |   14 +
- 273 files changed, 49717 insertions(+), 112 deletions(-)
+ 273 files changed, 49742 insertions(+), 113 deletions(-)
  create mode 100644 .stylelintignore
  create mode 100644 app/javascript/flavours/glitch/components/status_reactions.tsx
  create mode 100644 app/javascript/flavours/glitch/features/explore/components/author_link.jsx
@@ -635,14 +635,14 @@ index 04a2bf524e..638d0d434f 100644
  
  Mastodon Glitch Edition is a fork of [Mastodon](https://github.com/mastodon/mastodon). Upstream's README file is reproduced below.
 diff --git a/app/controllers/api/v1/custom_emojis_controller.rb b/app/controllers/api/v1/custom_emojis_controller.rb
-index 76bc2b18ad..4c056c952e 100644
+index 76bc2b18ad..7ca57bc2e5 100644
 --- a/app/controllers/api/v1/custom_emojis_controller.rb
 +++ b/app/controllers/api/v1/custom_emojis_controller.rb
 @@ -2,6 +2,7 @@
  
  class Api::V1::CustomEmojisController < Api::BaseController
    vary_by '', unless: :disallow_unauthenticated_api_access?
-+  skip_before_action :require_authenticated_user!, unless: :whitelist_mode?
++  skip_before_action :require_authenticated_user!, unless: :limited_federation_mode?
  
    def index
      cache_even_if_authenticated! unless disallow_unauthenticated_api_access?
@@ -50974,10 +50974,10 @@ index d2ff6e4a00..c73b211ae3 100644
 +                            limit: 8,
                              start_at: @time_period.first
 diff --git a/app/views/admin/settings/other/show.html.haml b/app/views/admin/settings/other/show.html.haml
-index 1a7a4e46e5..1bf04a3650 100644
+index 1a7a4e46e5..0a0cf806b5 100644
 --- a/app/views/admin/settings/other/show.html.haml
 +++ b/app/views/admin/settings/other/show.html.haml
-@@ -14,13 +14,27 @@
+@@ -14,13 +14,42 @@
      = f.input :hide_followers_count, as: :boolean, wrapper: :with_label, label: t('admin.settings.hide_followers_count.title'), hint: t('admin.settings.hide_followers_count.desc_html'), glitch_only: true
  
    .fields-group
@@ -50986,13 +50986,28 @@ index 1a7a4e46e5..1bf04a3650 100644
  
    .fields-group
 -    = f.input :show_replies_in_public_timelines, as: :boolean, wrapper: :with_label, label: t('admin.settings.show_replies_in_public_timelines.title'), hint: t('admin.settings.show_replies_in_public_timelines.desc_html'), glitch_only: true
-+    = f.input :show_replies_in_local_timelines, as: :boolean, wrapper: :with_label, label: t('admin.settings.show_replies_in_local_timelines.title'), hint: t('admin.settings.show_replies_in_local_timelines.desc_html'), glitch_only: true
++    = f.input :show_replies_in_local_timelines,
++              as: :boolean,
++              wrapper: :with_label,
++              label: t('admin.settings.show_replies_in_local_timelines.title'),
++              hint: t('admin.settings.show_replies_in_local_timelines.desc_html'),
++              glitch_only: true
 +
 +  .fields-group
-+    = f.input :show_reblogs_in_federated_timelines, as: :boolean, wrapper: :with_label, label: t('admin.settings.show_reblogs_in_federated_timelines.title'), hint: t('admin.settings.show_reblogs_in_federated_timelines.desc_html'), glitch_only: true
++    = f.input :show_reblogs_in_federated_timelines,
++              as: :boolean,
++              wrapper: :with_label,
++              label: t('admin.settings.show_reblogs_in_federated_timelines.title'),
++              hint: t('admin.settings.show_reblogs_in_federated_timelines.desc_html'),
++              glitch_only: true
 +
 +  .fields-group
-+    = f.input :show_replies_in_federated_timelines, as: :boolean, wrapper: :with_label, label: t('admin.settings.show_replies_in_federated_timelines.title'), hint: t('admin.settings.show_replies_in_federated_timelines.desc_html'), glitch_only: true
++    = f.input :show_replies_in_federated_timelines,
++              as: :boolean,
++              wrapper: :with_label,
++              label: t('admin.settings.show_replies_in_federated_timelines.title'),
++              hint: t('admin.settings.show_replies_in_federated_timelines.desc_html'),
++              glitch_only: true
  
    .fields-group
      = f.input :outgoing_spoilers, wrapper: :with_label, label: t('admin.settings.outgoing_spoilers.title'), hint: t('admin.settings.outgoing_spoilers.desc_html'), glitch_only: true
@@ -51111,7 +51126,7 @@ index 0000000000..a75a73c933
 +  config.x.qrtool_binary = ENV['QRTOOL_BINARY'] || 'qrtool'
 +end
 diff --git a/config/locales-glitch/simple_form.fr.yml b/config/locales-glitch/simple_form.fr.yml
-index e5e6539e32..d6963f3ddb 100644
+index e5e6539e32..560c4eac0c 100644
 --- a/config/locales-glitch/simple_form.fr.yml
 +++ b/config/locales-glitch/simple_form.fr.yml
 @@ -20,7 +20,9 @@ fr:
@@ -51120,10 +51135,10 @@ index e5e6539e32..d6963f3ddb 100644
          setting_system_emoji_font: Utiliser la police par défaut du système pour les émojis (s'applique uniquement au mode Glitch)
 +        setting_visible_reactions: Nombre de réactions emoji visibles
        notification_emails:
++        setting_visible_reactions: Nombre de réactions emoji visibles
          trending_link: Un nouveau lien en tendances nécessite un examen
          trending_status: Un nouveau post en tendances nécessite un examen
          trending_tag: Un nouveau tag en tendances nécessite un examen
-+        setting_visible_reactions: Nombre de réactions emoji visibles
 diff --git a/db/migrate/20221218015350_fix_foreign_keys_status_reactions.rb b/db/migrate/20221218015350_fix_foreign_keys_status_reactions.rb
 new file mode 100644
 index 0000000000..916ad10773
@@ -52036,7 +52051,7 @@ index c675a7c8a4..259b455918 100644
    class InvalidParameterError < Error; end
 diff --git a/lib/paperclip/qr_decoder.rb b/lib/paperclip/qr_decoder.rb
 new file mode 100644
-index 0000000000..94a32a2baf
+index 0000000000..d1eca53743
 --- /dev/null
 +++ b/lib/paperclip/qr_decoder.rb
 @@ -0,0 +1,32 @@
@@ -52050,7 +52065,7 @@ index 0000000000..94a32a2baf
 +      return @file if options[:style] != :original || !@attachment.instance.respond_to?(:description)
 +
 +      code_word = decode_qrcode_from_file!
-+      @attachment.instance.description = [@attachment.instance.description, code_word].reject(&:blank?).join('\n') if code_word.present?
++      @attachment.instance.description = [@attachment.instance.description, code_word].compact_blank.join('\n') if code_word.present?
 +
 +      @file
 +    end
@@ -52064,7 +52079,7 @@ index 0000000000..94a32a2baf
 +      rescue Terrapin::ExitStatusError
 +        return nil
 +      rescue Terrapin::CommandNotFoundError
-+        log('Could not run the `qrtool` command. Please install qrtool.')
++        Rails.logger.warn('Could not run the `qrtool` command. Please install qrtool.')
 +        return nil
 +      end
 +
@@ -52165,7 +52180,7 @@ index 5bca795908..3ed62c9364 100644
      subject { account.reblogged?(status) }
  
 diff --git a/spec/models/notification_spec.rb b/spec/models/notification_spec.rb
-index 08427a521a..668933c040 100644
+index 08427a521a..3052cbc8d3 100644
 --- a/spec/models/notification_spec.rb
 +++ b/spec/models/notification_spec.rb
 @@ -9,6 +9,7 @@ RSpec.describe Notification do
@@ -52219,10 +52234,28 @@ index 08427a521a..668933c040 100644
          ]
        end
  
-@@ -329,6 +345,13 @@ RSpec.describe Notification do
+@@ -273,7 +289,8 @@ RSpec.describe Notification do
+               follow_attributes,
+               follow_request_attributes,
+               favourite_attributes,
+-              poll_attributes
++              poll_attributes,
++              reaction_attributes
+             )
+         end
+ 
+@@ -329,6 +346,21 @@ RSpec.describe Notification do
              target_status: eq(poll.status).and(have_loaded_association(:account))
            ).and(have_loaded_association(:poll))
          end
++
++        def reaction_attributes
++          have_attributes(
++            type: :reaction,
++            status_reaction: have_loaded_association(:status),
++            target_status: eq(reaction.status).and(have_loaded_association(:account))
++          ).and(have_loaded_association(:status_reaction))
++        end
 +
 +        it 'replaces reaction' do
 +          # reaction
@@ -52234,7 +52267,7 @@ index 08427a521a..668933c040 100644
      end
    end
 diff --git a/spec/policies/status_policy_spec.rb b/spec/policies/status_policy_spec.rb
-index 65bdbd4bc4..1e5eb64aa0 100644
+index 65bdbd4bc4..feda895a2d 100644
 --- a/spec/policies/status_policy_spec.rb
 +++ b/spec/policies/status_policy_spec.rb
 @@ -236,6 +236,24 @@ RSpec.describe StatusPolicy, type: :model do
@@ -52244,8 +52277,8 @@ index 65bdbd4bc4..1e5eb64aa0 100644
 +  context 'with the permission of react?' do
 +    permissions :react? do
 +      it 'grants access when viewer is not blocked' do
-+        react = Fabricate(:react)
-+        status.account = react.target_account
++        react = Fabricate(:status_reaction)
++        status.account = react.status.account
 +
 +        expect(subject).to permit(react.account, status)
 +      end
@@ -52264,7 +52297,7 @@ index 65bdbd4bc4..1e5eb64aa0 100644
        it 'grants access if owner' do
 diff --git a/spec/requests/api/v1/statuses/reactions_controller_spec.rb b/spec/requests/api/v1/statuses/reactions_controller_spec.rb
 new file mode 100644
-index 0000000000..83319ee41c
+index 0000000000..61f999b127
 --- /dev/null
 +++ b/spec/requests/api/v1/statuses/reactions_controller_spec.rb
 @@ -0,0 +1,114 @@
@@ -52272,7 +52305,7 @@ index 0000000000..83319ee41c
 +
 +require 'rails_helper'
 +
-+describe Api::V1::Statuses::ReactionsController do
++RSpec.describe Api::V1::Statuses::ReactionsController do
 +  let(:user)  { Fabricate(:user) }
 +  let(:app)   { Fabricate(:application, name: 'Test app', website: 'http://testapp.com') }
 +  let(:token) { Fabricate(:accessible_access_token, resource_owner_id: user.id, scopes: 'write:favourites', application: app) }
@@ -52467,7 +52500,7 @@ index 52d2b9cf22..99e3e7f984 100644
          expect(subject.format).to eq :json
 diff --git a/spec/services/react_service_spec.rb b/spec/services/react_service_spec.rb
 new file mode 100644
-index 0000000000..de72e56847
+index 0000000000..fb521c305f
 --- /dev/null
 +++ b/spec/services/react_service_spec.rb
 @@ -0,0 +1,40 @@
@@ -52506,14 +52539,14 @@ index 0000000000..de72e56847
 +      expect(status.reactions.first).to_not be_nil
 +    end
 +
-+    it 'sends a react activity' do
++    it 'sends a react activity', :inline_jobs do
 +      expect(a_request(:post, 'http://example.com/inbox')).to have_been_made.once
 +    end
 +  end
 +end
 diff --git a/spec/services/unreact_service_spec.rb b/spec/services/unreact_service_spec.rb
 new file mode 100644
-index 0000000000..45dd3fb065
+index 0000000000..1ec3833f54
 --- /dev/null
 +++ b/spec/services/unreact_service_spec.rb
 @@ -0,0 +1,42 @@
@@ -52554,7 +52587,7 @@ index 0000000000..45dd3fb065
 +      expect(status.reactions.first).to be_nil
 +    end
 +
-+    it 'sends an undo activity' do
++    it 'sends an undo activity', :inline_jobs do
 +      expect(a_request(:post, 'http://example.com/inbox')).to have_been_made.once
 +    end
 +  end
@@ -52580,7 +52613,7 @@ index 7e2f9607cf..373a92d75e 100644
        end
 diff --git a/spec/validators/status_reaction_validator_spec.rb b/spec/validators/status_reaction_validator_spec.rb
 new file mode 100644
-index 0000000000..27dabaa80f
+index 0000000000..94ded19d31
 --- /dev/null
 +++ b/spec/validators/status_reaction_validator_spec.rb
 @@ -0,0 +1,40 @@
@@ -52588,37 +52621,37 @@ index 0000000000..27dabaa80f
 +
 +require 'rails_helper'
 +
-+describe StatusReactionValidator do
++RSpec.describe StatusReactionValidator do
 +  let(:status) { Fabricate(:status) }
 +  let(:account) { Fabricate(:account) }
 +  let(:remote_account) { Fabricate(:account, domain: 'example.com') }
 +
 +  describe '#validate' do
 +    it 'adds error when not a valid unicode emoji' do
-+      reaction = status.reactions.build(name: 'F', account: account)
++      reaction = status.status_reactions.build(name: 'F', account: account)
 +      subject.validate(reaction)
 +      expect(reaction.errors).to_not be_empty
 +    end
 +
 +    it 'does not add error when non-unicode emoji is a custom emoji' do
 +      custom_emoji = Fabricate(:custom_emoji)
-+      reaction = status.reactions.build(name: custom_emoji.shortcode, custom_emoji: custom_emoji, account: account)
++      reaction = status.status_reactions.build(name: custom_emoji.shortcode, custom_emoji: custom_emoji, account: account)
 +      subject.validate(reaction)
 +      expect(reaction.errors).to be_empty
 +    end
 +
 +    it 'adds error when local account already reacted' do
-+      status.reactions.create!(name: '👍', account: account)
++      status.status_reactions.create!(name: '👍', account: account)
 +
-+      reaction = status.reactions.build(name: '😘', account: account)
++      reaction = status.status_reactions.build(name: '😘', account: account)
 +      subject.validate(reaction)
 +      expect(reaction.errors).to_not be_empty
 +    end
 +
 +    it 'does not add error when remote account already reacted' do
-+      status.reactions.create!(name: '👍', account: remote_account)
++      status.status_reactions.create!(name: '👍', account: remote_account)
 +
-+      reaction = status.reactions.build(name: '😘', account: remote_account)
++      reaction = status.status_reactions.build(name: '😘', account: remote_account)
 +      subject.validate(reaction)
 +      expect(reaction.errors).to be_empty
 +    end
@@ -52626,7 +52659,7 @@ index 0000000000..27dabaa80f
 +end
 diff --git a/spec/workers/unreact_worker_spec.rb b/spec/workers/unreact_worker_spec.rb
 new file mode 100644
-index 0000000000..ed4fc5ecf9
+index 0000000000..14d8a20b7f
 --- /dev/null
 +++ b/spec/workers/unreact_worker_spec.rb
 @@ -0,0 +1,16 @@
@@ -52634,7 +52667,7 @@ index 0000000000..ed4fc5ecf9
 +
 +require 'rails_helper'
 +
-+describe UnreactWorker do
++RSpec.describe UnreactWorker do
 +  let(:worker) { described_class.new }
 +
 +  describe 'perform' do

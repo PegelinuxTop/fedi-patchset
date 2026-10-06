@@ -5,9 +5,9 @@ The series in `series` applies bottom-up on `.base-commit`:
 ```
 b3877d5b24 (glitch-soc main)
   └─ 0001-feature-reaction-list.patch        97 files   +2391 /  −92
-      └─ 0002-feature-bubble-timeline.patch  60 files   +1474 /  −83
-          └─ 0003-feature-gif-picker.patch   31 files    +891 /  −21
-              └─ 0004-fedi-branding-themes.patch 273 files +49717 / −112
+      └─ 0002-feature-bubble-timeline.patch  60 files   +1476 /  −83
+          └─ 0003-feature-gif-picker.patch   31 files    +886 /  −21
+              └─ 0004-fedi-branding-themes.patch 273 files +49742 / −113
                   └─ 0005-fedi-compat-overlay.patch 11 files +45 / −3
 ```
 
@@ -78,9 +78,10 @@ files, 39 modified.
   `broadcast_to_public_stream` applies each channel's own
   `show_{reblogs,replies}_in_{local,federated}_timelines` pair, self-replies keep
   publishing, and `broadcastable?` no longer tests the pre-rename reblog setting.
-  `spec/services/fan_out_on_write_service_spec.rb` gains the cases for it. This is
-  the only patch that touches `app/services/fan_out_on_write_service.rb`, so a
-  conflict in fan-out lands here.
+  `spec/services/fan_out_on_write_service_spec.rb` gains the cases for it (plus the
+  `let(:visibility)` the first version of those cases was missing, so they actually
+  run). This is the only patch that touches
+  `app/services/fan_out_on_write_service.rb`, so a conflict in fan-out lands here.
 
 ## 0003 — `feature/gif-picker`
 
@@ -102,6 +103,11 @@ TheEssem's GIF search. 16 new files, 15 modified.
   `containers/upload_button_container.js`, `actions/compose.js`,
   `reducers/compose.js`), `api_types/instance.ts` and
   `app/javascript/flavours/glitch/styles/mastodon/components.scss`.
+  In `config/locales-glitch/en.yml` this patch also *is* the one that normalises the
+  file: it inserts the `gif:` block where `bin/i18n-tasks check-normalized` wants it
+  (before `notification_mailer`, not after `settings`), and it does not re-add the
+  `notification_mailer.reaction` block that `dev` carries twice (patch 1 already adds
+  it once).
 - **Carries shared configuration**: no.
 
 ## 0004 — `fedi/branding-themes`
@@ -156,6 +162,18 @@ SCSS themes and skins:
   `app/workers/scheduler/admin/dashboard_cache_warmer_scheduler.rb`,
   `.stylelintignore`, `domain_blocks.csv`), its new Ruby specs (`spec/**`) and the
   three migrations below.
+- **Also fixes** (README deviations 8–10, all pre-existing in `dev`):
+  `app/controllers/api/v1/custom_emojis_controller.rb` (`whitelist_mode?` →
+  `limited_federation_mode?`, the name glitch-soc kept), `lib/paperclip/qr_decoder.rb`
+  (`log(...)` → `Rails.logger.warn(...)` and `reject(&:blank?)` → `compact_blank`),
+  `app/views/admin/settings/other/show.html.haml` (three over-long `f.input` lines
+  wrapped), `config/locales-glitch/simple_form.fr.yml` (key order), and the fork's
+  specs `spec/requests/api/v1/statuses/reactions_controller_spec.rb`,
+  `spec/validators/status_reaction_validator_spec.rb`,
+  `spec/workers/unreact_worker_spec.rb` (`RSpec.describe`),
+  `spec/services/{react,unreact}_service_spec.rb` (`:inline_jobs`),
+  `spec/policies/status_policy_spec.rb` (`Fabricate(:status_reaction)`) and
+  `spec/models/notification_spec.rb` (reaction expectation).
   Note what is *not* here: `Dockerfile` and `eslint.config.mjs` are 0005, and
   `streaming/index.js` and `app/models/account.rb` are 0002 — glitch-soc changed
   those files too (except `streaming/index.js`, which 0002 owns for its bubble
@@ -197,7 +215,10 @@ patch, by these rules:
    and the series applies cleanly;
 4. files the fork never touches, edited only to satisfy the repository's own
    linters, go to **0005** (they are among the 6 deviations the fork comparison
-   reports separately).
+   reports separately);
+5. later fixes found by running the checks (the runtime renames, lint findings and
+   broken specs of README deviations 8–10) stay in the patch that already owns the
+   file, even where the file is a fork-only one.
 
 Consequences worth knowing when rebasing:
 

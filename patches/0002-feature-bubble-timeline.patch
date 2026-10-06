@@ -1,4 +1,4 @@
-From 2f7be82f7465d71b4244978a8aac963c2cd716bf Mon Sep 17 00:00:00 2001
+From 96168a658078c0b447d24bec918116441729c0f1 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:07:48 +0700
 Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
@@ -63,9 +63,9 @@ Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
  spec/requests/api/v1/timelines/link_spec.rb   |   3 +-
  spec/requests/api/v1/timelines/public_spec.rb |   3 +-
  spec/requests/api/v1/timelines/tag_spec.rb    |   3 +-
- .../services/fan_out_on_write_service_spec.rb |  80 +++++++
+ .../services/fan_out_on_write_service_spec.rb |  82 +++++++
  streaming/index.js                            |  43 +++-
- 60 files changed, 1474 insertions(+), 83 deletions(-)
+ 60 files changed, 1476 insertions(+), 83 deletions(-)
  create mode 100644 app/controllers/admin/bubble_domains_controller.rb
  create mode 100644 app/controllers/api/v1/instances/bubble_domains_controller.rb
  create mode 100644 app/javascript/flavours/glitch/features/bubble_timeline/components/column_settings.jsx
@@ -2500,10 +2500,10 @@ index 0992d59c79..eaded9e9db 100644
  
        it_behaves_like 'forbidden for wrong scope', 'profile'
 diff --git a/spec/services/fan_out_on_write_service_spec.rb b/spec/services/fan_out_on_write_service_spec.rb
-index efc70d84c6..130cc7b369 100644
+index efc70d84c6..0e19e460e5 100644
 --- a/spec/services/fan_out_on_write_service_spec.rb
 +++ b/spec/services/fan_out_on_write_service_spec.rb
-@@ -77,6 +77,86 @@ RSpec.describe FanOutOnWriteService do
+@@ -77,6 +77,88 @@ RSpec.describe FanOutOnWriteService do
      end
    end
  
@@ -2579,6 +2579,8 @@ index efc70d84c6..130cc7b369 100644
 +  end
 +
 +  describe 'the timeline boost and reply settings' do
++    let(:visibility) { 'public' }
++
 +    it 'defaults to hiding boosts and replies in every public timeline' do
 +      expect(Setting.show_reblogs_in_local_timelines).to be(false)
 +      expect(Setting.show_replies_in_local_timelines).to be(false)
