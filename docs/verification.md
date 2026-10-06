@@ -140,7 +140,7 @@ Redis 8.10.2 and StGit 2.6.1.
 
 | Check | Result |
 |---|---|
-| `setup.sh` (git am) from a fresh clone | applies, tree identical to the reference (`7727c6148a`) |
+| `setup.sh` (git am) from a fresh clone | applies, tree identical to the reference (`b473d8b76f`) |
 | `setup.sh --stg` | same tree, stack `0001…0005` |
 | `lint-patches.sh` with `BASE_REPO` | all checks passed; all 5 patches apply cleanly |
 | `compare-with-fork.sh` | 464/464 fork changes preserved, 0 lost; 806 differing paths, 90 documented deviations, 0 unexplained |
