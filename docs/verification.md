@@ -28,8 +28,16 @@ lint-patches: all checks passed (0 warning(s))
 ## 2. The build still contains the fork
 
 ```sh
-scripts/compare-with-fork.sh --result ~/src/fedi.my.id
+scripts/compare-with-fork.sh --result ~/src/fedi.my.id                      # vs dev
+scripts/compare-with-fork.sh --result ~/src/fedi.my.id \
+  --fork-ref backup-20261006                                                # pre-sync
 ```
+
+The first form compares the result with `fedi.my.id@dev`, which since 2026-10-06
+holds the same tree, so it passes trivially (a mirror check that a rebuild
+reproduces the branch). The second compares against the fork as it was before that
+sync, which is the comparison the numbers below and in
+[fork-comparison.md](fork-comparison.md) come from.
 
 It fetches the fork branch into the built checkout under a temporary ref, finds
 the merge base with `.base-commit`, and reports:
@@ -143,7 +151,8 @@ Redis 8.10.2 and StGit 2.6.1.
 | `setup.sh` (git am) from a fresh clone | applies, tree identical to the reference (`b473d8b76f`) |
 | `setup.sh --stg` | same tree, stack `0001…0005` |
 | `lint-patches.sh` with `BASE_REPO` | all checks passed; all 5 patches apply cleanly |
-| `compare-with-fork.sh` | 464/464 fork changes preserved, 0 lost; 806 differing paths, 90 documented deviations, 0 unexplained |
+| `compare-with-fork.sh` (`--fork-ref backup-20261006`) | 464/464 fork changes preserved, 0 lost; 806 differing paths, 90 documented deviations, 0 unexplained |
+| `compare-with-fork.sh` (default, vs the rebuilt `dev`) | 470/470 preserved, 470/470 byte-identical, 0 differing paths |
 | `check-ruby-syntax.mjs` | 125 changed `.rb`/`.rake` files, 0 syntax errors |
 | JSON/YAML parse | 34 changed files, 0 invalid |
 | `yarn format:check` | 2140 files, all correctly formatted |

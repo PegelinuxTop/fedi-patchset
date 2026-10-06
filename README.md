@@ -28,6 +28,15 @@ Mastodon/glitch-soc releases could only be picked up after that re-merge. This
 repository keeps the same result as a patch series that applies directly to
 glitch-soc main, so upstream updates are a rebase here instead of a wait.
 
+Since 2026-10-06 the fork's `dev` branch *is* this result: commit `43e2b637c8`,
+whose second parent is the series (glitch-soc `b3877d5b24` plus patches 1–5) and
+whose tree is the verified build tree
+`b473d8b76fe2fb8cd5084e3135a62ea923c2d126`. It was pushed as a fast-forward over
+the previous `dev` (`b416d280e0`), which is preserved as the branch
+`backup-20261006`. Wherever these documents say "`dev`", they mean that pre-sync
+branch unless they say otherwise; [docs/fork-comparison.md](docs/fork-comparison.md)
+explains what the comparison now checks.
+
 ## Requirements
 
 | For | Needs |
@@ -56,6 +65,11 @@ scripts/compare-with-fork.sh --result ~/src/fedi.my.id   # vs fedi.my.id@dev
 BASE_REPO=~/src/mastodon scripts/lint-patches.sh         # patches are internally sound
 ```
 
+Since the 2026-10-06 sync `dev` holds exactly the build tree, so the comparison
+above is a mirror check; add `--fork-ref backup-20261006` to compare against the
+fork as it was before the sync — that is what the numbers in
+[docs/fork-comparison.md](docs/fork-comparison.md) describe.
+
 `setup.sh` options: `--dest DIR`, `--branch NAME`, `--remote URL`, `--stg`,
 `--force`, `--help`. It is safe to re-run: an existing checkout is reused, the
 branch is reset to the base commit and the series is applied again.
@@ -71,11 +85,11 @@ README.md                        this file
 docs/updating.md                 rebasing onto a newer glitch-soc
 docs/patch-reference.md          what each patch contains and why
 docs/verification.md             how to verify a build, and what was verified
-docs/fork-comparison.md          how the result relates to the fork's dev branch
+docs/fork-comparison.md          how the result relates to the fork (and its dev branch)
 docs/image.md                    the container image: how it is built, tagged and run
 scripts/setup.sh                 build the patched tree
 scripts/lint-patches.sh          static checks on the series + apply test
-scripts/compare-with-fork.sh     compare the result with fedi.my.id@dev
+scripts/compare-with-fork.sh     compare the result with the fork (dev; --fork-ref)
 scripts/build-image.sh           build the container image from a patched tree
 scripts/check-ruby-syntax.mjs    parse changed Ruby files without Ruby (Prism/WASM)
 .github/workflows/image.yml      builds and pushes ghcr.io/pegelinuxtop/fedi.my.id
@@ -172,11 +186,13 @@ browser session against a real server) are in
 [docs/verification.md](docs/verification.md); the fork comparison is explained in
 [docs/fork-comparison.md](docs/fork-comparison.md).
 
-## Deviations from the fork's `dev` branch
+## Deviations from the fork
 
-The tree is generated from a merge of `fedi.my.id@dev` onto the base commit, so it
-is the fork's tree plus glitch-soc's evolution since the fork's last glitch-soc
-merge. These are the intentional differences from `dev` itself:
+The tree is generated from a merge of the fork's pre-sync `dev`
+(`fedi.my.id@dev` at `b416d280e0`, now the branch `backup-20261006`) onto the base
+commit, so it is the fork's tree plus glitch-soc's evolution since the fork's last
+glitch-soc merge. `dev` itself now holds exactly this tree, so these are the
+intentional differences from that pre-sync branch:
 
 1. **The fork's per-timeline boost/reply settings are now wired through fan-out**
    (`config/settings.yml`, `app/services/fan_out_on_write_service.rb`,
@@ -348,10 +364,11 @@ Behaviour worth knowing before deploying this tree:
 
 ## Provenance
 
-How this revision was produced (it is reproducible from `dev` and the base
-commit):
+How this revision was produced (it is reproducible from the pre-sync `dev`, branch
+`backup-20261006`, and the base commit):
 
-1. `git merge` of `fedi.my.id@dev` onto `b3877d5b245c6fa65f1a7639fa5593c6b6ade8fc`
+1. `git merge` of `fedi.my.id@dev` (`b416d280e0`) onto
+   `b3877d5b245c6fa65f1a7639fa5593c6b6ade8fc`
    (merge-base `64e05b4b2eece29fafeff43c867bb0985c28bc52`, the fork's last
    glitch-soc merge);
 2. the 8 conflicts resolved by keeping glitch-soc's newer code and re-applying the
@@ -367,15 +384,22 @@ commit):
    fork's own specs (deviation 10);
 5. the patches exported with `git format-patch`, and the checks in
    [docs/verification.md](docs/verification.md) run — including the Ruby-side
-   checks, which need Ruby 4.0.7, PostgreSQL and Redis (deviation note above).
+   checks, which need Ruby 4.0.7, PostgreSQL and Redis (deviation note above);
+6. the series applied to glitch-soc `b3877d5b24` and merged into the fork as
+   `dev` (commit `43e2b637c8`, tree `b473d8b76fe2fb8cd5084e3135a62ea923c2d126`,
+   first parent the previous dev `b416d280e0`, kept as `backup-20261006`). The push
+   was a fast-forward, and the comparison against the new `dev` reports the result
+   byte-identical — the numbers in the next paragraph are the ones against the
+   pre-sync fork.
 
 Of the fork's 464 changed files, all 464 survive. Of the 421 files that only the
-fork touches, 340 are byte-identical to `dev` and the other 81 are fork-only
-deviations above (63 theme SCSS plus 18 code and spec files); 9 further deviations
-are files neither the fork nor glitch-soc changed, which only the patch set edits —
-the five lint/type fixes, the fan-out spec cases (deviation 1) and the three specs
-of deviations 11–12. 806 paths in total differ from `dev`: 620 modified, 77 added
-and 19 removed by glitch-soc since the fork's last merge, plus those 90 deviations.
+fork touches, 340 are byte-identical to the pre-sync `dev` and the other 81 are
+fork-only deviations above (63 theme SCSS plus 18 code and spec files); 9 further
+deviations are files neither the fork nor glitch-soc changed, which only the patch
+set edits — the five lint/type fixes, the fan-out spec cases (deviation 1) and the
+three specs of deviations 11–12. 806 paths in total differ from that pre-sync `dev`:
+620 modified, 77 added and 19 removed by glitch-soc since the fork's last merge,
+plus those 90 deviations.
 The fork's own changes are in patches 1–4; patch 5 is the reconciliation layer on
 top.
 [docs/fork-comparison.md](docs/fork-comparison.md) has the full breakdown.

@@ -2,9 +2,11 @@
 #
 # Compare the tree produced by this patch set against the fork's own branch
 # (fedi.my.id@dev). The result is a patch set on top of *current* glitch-soc, so
-# it is not byte-identical to the fork: it carries glitch-soc's evolution since
-# the fork's last merge, plus the deviations documented in README.md. This script
-# says exactly how the two relate, and fails if a fork customisation is lost.
+# it is not byte-identical to the pre-sync fork: it carries glitch-soc's evolution
+# since the fork's last merge, plus the deviations documented in README.md. This
+# script says exactly how the two relate, and fails if a fork customisation is lost.
+# Since 2026-10-06 `dev` itself is this result tree, so the default comparison is a
+# mirror check; pass `--fork-ref backup-20261006` for the pre-sync fork.
 #
 # Requires git + coreutils only. It compares commits, so the checkout it looks at
 # may be dirty.
@@ -36,6 +38,7 @@ Options:
   --fork PATH        Clone of fedi.my.id to compare against.
                      Default: \$REPO_DIR/../fedi.my.id
   --fork-ref REF     Ref to compare against. Default: origin/dev, then dev.
+                     A bare name also matches origin/REF, e.g. backup-20261006.
   --base COMMIT      glitch-soc base commit. Default: .base-commit
                      ($BASE_COMMIT)
   --all              List every differing file instead of the first 20.
@@ -123,8 +126,16 @@ if [[ -z "$FORK_REF" ]]; then
   fi
 fi
 if ! git -C "$FORK" rev-parse --verify --quiet "$FORK_REF^{commit}" >/dev/null; then
-  echo "compare-with-fork.sh: $FORK has no ref '$FORK_REF'" >&2
-  exit 1
+  # A bare branch name is accepted when the clone knows it only as a
+  # remote-tracking ref, e.g. `--fork-ref backup-20261006` for
+  # `origin/backup-20261006` (the fork puts its own branches in `backup-*`).
+  if [[ "$FORK_REF" != */* ]] && \
+     git -C "$FORK" rev-parse --verify --quiet "origin/$FORK_REF^{commit}" >/dev/null; then
+    FORK_REF="origin/$FORK_REF"
+  else
+    echo "compare-with-fork.sh: $FORK has no ref '$FORK_REF'" >&2
+    exit 1
+  fi
 fi
 
 tmp_upstream="$(mktemp)"; tmp_fork="$(mktemp)"; tmp_fork_only="$(mktemp)"

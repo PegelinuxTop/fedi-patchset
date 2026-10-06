@@ -10,15 +10,32 @@ scripts/compare-with-fork.sh --result ~/src/fedi.my.id \
 
 Defaults: `--result` is `build/` if `setup.sh` put it there and the current
 directory otherwise; `--fork` is the sibling `fedi.my.id` checkout of this
-repository; `--fork-ref` is `origin/dev`, then `dev`.
+repository; `--fork-ref` is `origin/dev`, then `dev`. A bare name also matches
+`origin/<name>`, so `--fork-ref backup-20261006` works on a clone that only has that
+branch as a remote-tracking ref.
 
-## Why it cannot be byte-identical
+## Which fork ref to compare against
 
-The patch set is the fork **rebased onto a newer glitch-soc**. `fedi.my.id@dev` is
-based on glitch-soc `64e05b4b2e`; this series targets `b3877d5b24`. Everything
-glitch-soc changed in between is therefore newer in the result, and files that both
-sides touched necessarily differ from `dev` in their bytes. What must hold instead
-is:
+`fedi.my.id@dev` was rebuilt from this series on 2026-10-06: commit `43e2b637c8`,
+whose second parent is the series and whose tree is the verified build tree
+`b473d8b76fe2fb8cd5084e3135a62ea923c2d126`, pushed as a fast-forward over the
+previous dev `b416d280e0` (kept as the branch `backup-20261006`). The default
+`--fork-ref origin/dev` therefore compares the result with itself — a **mirror
+check**: 0 differing paths, all 470 fork changes present, all 470 fork-only files
+byte-identical. To reproduce the analysis below, compare against the fork as it was
+before the sync:
+
+```sh
+scripts/compare-with-fork.sh --result ~/src/fedi.my.id --fork-ref backup-20261006
+```
+
+## Why it cannot be byte-identical (against the pre-sync fork)
+
+The patch set is the fork **rebased onto a newer glitch-soc**. The pre-sync
+`fedi.my.id@dev` (`backup-20261006`) is based on glitch-soc `64e05b4b2e`; this
+series targets `b3877d5b24`. Everything glitch-soc changed in between is therefore
+newer in the result, and files that both sides touched necessarily differ from that
+`dev` in their bytes. What must hold instead is:
 
 - every file the fork changed since its merge point still differs from that
   pre-fork baseline (customisation present), and
@@ -56,7 +73,47 @@ Exit status 0 means: nothing lost, no path differs for an unexplained reason.
 
 ## Current numbers
 
-For `.base-commit` `b3877d5b24`, fork `origin/dev` `b416d280e0`, merge point
+### Mirror check — against `dev`
+
+`.base-commit` `b3877d5b24`, fork `origin/dev` `43e2b637c8`. Because `dev` *is* the
+result, the merge point is the base commit itself and the two trees are identical:
+
+```
+==> Inputs
+  result     : ~/src/fedi.my.id (43e2b637c8)
+  fork       : fedi.my.id (origin/dev 43e2b637c8)
+  base       : b3877d5b24 (glitch-soc)
+  merge point: b3877d5b24 (the fork's last glitch-soc merge)
+
+==> Fork changes preserved (fork relative to its merge point)
+  files the fork changed since the merge point : 470
+  still differing in the result                : 470
+  ok    no fork change was silently dropped
+
+==> Fork-only files (glitch-soc did not touch them)
+  count                      : 470
+  byte-identical to the fork : 470
+  differing                  : 0
+
+==> Result vs fork
+  differing paths in total              : 0
+  modified by glitch-soc since the merge: 0
+  added by glitch-soc                   : 0
+  removed by glitch-soc                 : 0
+  deviations (not glitch-soc-driven)    : 0
+```
+
+`470` is the file count of the series itself (the README's "470 files changed"):
+because the merge point *is* the base commit, glitch-soc contributes no differences
+of its own, so every path is classified as fork-side — and all of it is
+byte-identical to `dev`. That makes this run a cheap way to prove a rebuild still
+reproduces the branch, but it says nothing about the fork's customisations versus
+glitch-soc, because both sides of the comparison moved together. Use the run below
+for that.
+
+### Against the pre-sync fork — `--fork-ref backup-20261006`
+
+For `.base-commit` `b3877d5b24`, fork `backup-20261006` `b416d280e0`, merge point
 `64e05b4b2e` (refresh these after a rebase):
 
 ```
@@ -138,8 +195,9 @@ Two things are worth knowing about the counting:
   rest, and the preservation check (464/464) is the safety net that matters: it
   proves the fork's change to each of those files is still present.
 - It compares commits, not the working tree, so it is unaffected by local edits.
-- It cannot compare against what is running on fedi.my.id, only against the `dev`
-  branch as it exists in your clone. Fetch before you compare.
+- It cannot compare against what is running on fedi.my.id, only against a branch
+  that exists in your clone: `dev` by default, or `backup-20261006` for the fork as
+  it was before the 2026-10-06 sync. Fetch before you compare.
 - The numbers move whenever `dev`, the base commit or the deviations change; treat
   them as a report of the current revision, not as constants.
 

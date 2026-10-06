@@ -73,8 +73,11 @@ intent on top** — never revert glitch-soc to make a fork hunk apply unchanged.
   migrations, and never edit a migration that has already shipped. If glitch-soc
   ever lands a migration with the same timestamp as one of the fork's, renumber
   the fork's migration and note it in this file.
-- theme SCSS and other fork-only files: `dev`'s copy is authoritative; if the file
-  only exists in the fork there is nothing to merge.
+- theme SCSS and other fork-only files: the fork's copy is authoritative. That was
+  `dev` before the 2026-10-06 sync; `dev` now holds the built tree and the pre-sync
+  fork is `backup-20261006`, while the series in the build checkout is the fork's
+  current intent. For a file that only exists in the fork there is nothing to
+  merge.
 - `Dockerfile`, `streaming/*`, `eslint.config.mjs`, the two `link_footer.tsx`:
   these are the files that tend to become the `fedi/compat-overlay` patch.
 - `eslint.config.mjs` after a rebase: keep the `files: ['**/*.js', '**/*.jsx',
@@ -116,7 +119,10 @@ became empty (drop it from `series` and re-run) or that the rebase is incomplete
 
 ```sh
 BASE_REPO=~/src/fedi.my.id scripts/lint-patches.sh
-scripts/compare-with-fork.sh --result ~/src/fedi.my.id
+scripts/compare-with-fork.sh --result ~/src/fedi.my.id   # against the fork's dev
+# the fork's dev holds the previous result, so this run is the meaningful one after
+# a rebase; right after a sync (step 5) it is a mirror check, and
+# `--fork-ref backup-<date>` compares against the release before that sync
 scripts/check-ruby-syntax.mjs $(git -C ~/src/fedi.my.id diff --name-only "$NEW_BASE" HEAD | grep -E '\.(rb|rake)$')
 
 cd ~/src/fedi.my.id
@@ -138,13 +144,46 @@ values, and the environment the Ruby-side checks need (Ruby 4.0.7, PostgreSQL an
 Redis; `bin/rubocop`, `bin/haml-lint`, `bin/i18n-tasks …`, `bin/rails db:migrate`,
 `bin/flatware rspec`).
 
-## 5. Before you push
+## 5. Rebuild the fork's `dev` branch
+
+`fedi.my.id@dev` is the fork's branch and holds the previous result, so publish the
+new one as a merge commit whose tree is the verified build tree. Work in a scratch
+clone or a `git worktree` so the fork checkout stays on its own branch; never
+`git push --force` this branch.
+
+```sh
+cd ~/Workspace/mastodon/fedi.my.id                  # the fork clone
+git fetch origin
+git worktree add --detach /tmp/fedi-dev             # isolated build, optional
+
+# in the worktree: apply the series to the new base, then merge it into dev
+cd /tmp/fedi-dev
+git checkout -b series "$NEW_BASE"
+git am ~/Workspace/mastodon/fedi-patchset/patches/*.patch
+git checkout -B dev-sync origin/dev
+git merge --no-commit --no-ff series                # conflicts are expected here
+git read-tree --reset -u series                     # take the series' tree, as verified
+git commit                                          # first parent = old dev: fast-forward
+
+OLD_DEV=$(git rev-parse origin/dev)                 # capture before pushing
+git push origin dev-sync:refs/heads/dev             # fast-forward
+git push origin "$OLD_DEV":refs/heads/backup-$(date +%Y%m%d)
+```
+
+The push is a fast-forward, so nothing is rewritten; `scripts/compare-with-fork.sh`
+against `dev` then reports 0 differing paths (fork-comparison.md, "Mirror check").
+Tag or branch the old tip before pushing: `backup-20261006` preserves the
+pre-2026-10-06 dev, and the next sync would replace it the same way.
+
+## 6. Before you push
 
 - [ ] `scripts/lint-patches.sh` passes (series, migrations, clean apply)
 - [ ] `scripts/compare-with-fork.sh` reports no lost fork change
 - [ ] every deviation it lists is either documented in the README or intentional
       and newly documented
 - [ ] `.base-commit` and `series` match `patches/`
+- [ ] the fork's `dev` rebuilt and pushed as a fast-forward, with the old tip kept
+      as a `backup-<date>` branch (step 5)
 - [ ] the numbers quoted in `README.md` and `docs/fork-comparison.md` are refreshed
       (patch file counts, `+/-` totals, comparison counts)
 - [ ] the app's checks pass: `yarn format:check`, `yarn typecheck`, `yarn lint:css`
