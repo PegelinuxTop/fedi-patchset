@@ -51,12 +51,37 @@ Docker cannot `--load` more than one platform). arm64 is emulated with QEMU, so 
 is noticeably slower; glitch-soc's own workflow uses native `ubuntu-24.04-arm`
 runners if you would rather add a matrix.
 
-### First-time registry setup
+### The first build
 
-To get the first image, run the workflow once by hand: **Actions → Container image
-→ Run workflow** (leave `glitch_ref` at `main`, `push` on). It takes roughly 25–40
-minutes on a GitHub runner; the job summary lists the tags it pushed. After that the
-weekly schedule and every patch change keep it up to date.
+The first image was built by
+[run 37513494584](https://github.com/PegelinuxTop/fedi-patchset/actions/runs/37513494584)
+on 2026-10-06 (`glitch_ref=main` → glitch-soc `b3877d5b24`, patch-set revision
+`98b52c7`). It took 8m48s on an `ubuntu-24.04` runner with no build cache, and
+pushed
+
+- `ghcr.io/pegelinuxtop/fedi.my.id:latest` = `glitch-b3877d5b245c` =
+  `patchset-98b52c7`,
+- index digest
+  `sha256:96e9b78a62fbab8c360964766b94a2c2fec56b17fada7438646eca0e6dc47e41`,
+  with a provenance attestation, platform `linux/amd64`.
+
+Pulling that image back and inspecting it confirms the labels
+(`org.opencontainers.image.revision` = `b3877d5b245c`, `…version` =
+`glitch-b3877d5b245c`), the image environment (`SOURCE_COMMIT`,
+`MASTODON_VERSION_METADATA=glitch-b3877d5b245c`, `RUBY_VERSION=4.0.7`), `qrtool
+0.11.6`, the reaction/bubble migrations and the fork's files
+(`flavours/glitch/features/reactions/index.tsx`, `models/bubble_domain.rb`,
+`config/locales-glitch/en.yml`) — including the fan-out change of README
+deviation 1.
+
+To rebuild by hand: **Actions → Container image → Run workflow** (leave
+`glitch_ref` at `main`, `push` on); the job summary lists the tags it pushed. After
+that the weekly schedule and every patch change keep it up to date. Note that the
+`git am` step needs a committer identity, which GitHub runners do not have;
+`scripts/lint-patches.sh` supplies its own, so the check works there — an explicit
+identity is only needed if you write your own CI around `git am`.
+
+### Registry notes
 
 - the image name is lowercased (`ghcr.io/pegelinuxtop/fedi.my.id`) because GHCR
   rejects uppercase;
@@ -102,6 +127,9 @@ variables, exactly like Mastodon's own image:
 ```sh
 docker run --rm -it \
   -e SECRET_KEY_BASE="$(openssl rand -hex 64)" \
+  -e ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY="$(openssl rand -base64 32)" \
+  -e ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY="$(openssl rand -base64 32)" \
+  -e ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT="$(openssl rand -base64 32)" \
   -e LOCAL_DOMAIN=fedi.my.id \
   -e DB_HOST=host.docker.internal -e DB_USER=mastodon -e DB_PASS=… \
   -e REDIS_URL=redis://host.docker.internal:6379/0 \
@@ -129,8 +157,13 @@ Two things that are specific to this fork:
 ```sh
 docker pull ghcr.io/pegelinuxtop/fedi.my.id:latest
 docker run --rm ghcr.io/pegelinuxtop/fedi.my.id:latest qrtool --version
-docker run --rm -e SECRET_KEY_BASE=x ghcr.io/pegelinuxtop/fedi.my.id:latest \
-  bin/rails runner 'puts Mastodon::Version.to_s'
+# besides SECRET_KEY_BASE, this Mastodon wants the three Active Record
+# encryption keys set before it will boot
+docker run --rm -e SECRET_KEY_BASE=x \
+  -e ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=… \
+  -e ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY=… \
+  -e ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=… \
+  ghcr.io/pegelinuxtop/fedi.my.id:latest bin/rails runner 'puts Mastodon::Version.to_s'
 docker inspect ghcr.io/pegelinuxtop/fedi.my.id:latest \
   --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 ```
