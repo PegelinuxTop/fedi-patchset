@@ -84,6 +84,7 @@ series                           patch order, read by the scripts
 patches/0001..0005-*.patch       the patch series (git format-patch mail files)
 LICENSE                          AGPL-3.0 (glitch-soc / Mastodon)
 README.md                        this file
+docs/runbook.md                  the steps the operator does by hand (rebase, dev, image, deploy, rollback)
 docs/updating.md                 rebasing onto a newer glitch-soc
 docs/patch-reference.md          what each patch contains and why
 docs/verification.md             how to verify a build, and what was verified
