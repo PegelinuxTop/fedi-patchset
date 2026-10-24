@@ -21,7 +21,7 @@ whose second parent is the series and whose tree is the verified build tree
 `b473d8b76fe2fb8cd5084e3135a62ea923c2d126`, pushed as a fast-forward over the
 previous dev `b416d280e0` (kept as the branch `backup-20261006`). The default
 `--fork-ref origin/dev` therefore compares the result with itself — a **mirror
-check**: 0 differing paths, all 470 fork changes present, all 470 fork-only files
+check**: 0 differing paths, all 467 fork changes present, all 467 fork-only files
 byte-identical. To reproduce the analysis below, compare against the fork as it was
 before the sync:
 
@@ -75,24 +75,24 @@ Exit status 0 means: nothing lost, no path differs for an unexplained reason.
 
 ### Mirror check — against `dev`
 
-`.base-commit` `b3877d5b24`, fork `origin/dev` `43e2b637c8`. Because `dev` *is* the
+`.base-commit` `a0f9055f25`, fork `origin/dev` `6732274087`. Because `dev` *is* the
 result, the merge point is the base commit itself and the two trees are identical:
 
 ```
 ==> Inputs
-  result     : ~/src/fedi.my.id (43e2b637c8)
-  fork       : fedi.my.id (origin/dev 43e2b637c8)
-  base       : b3877d5b24 (glitch-soc)
-  merge point: b3877d5b24 (the fork's last glitch-soc merge)
+  result     : ~/src/fedi.my.id (c251d0a970)
+  fork       : fedi.my.id (origin/dev c251d0a970)
+  base       : a0f9055f25 (glitch-soc)
+  merge point: a0f9055f25 (the fork's last glitch-soc merge)
 
 ==> Fork changes preserved (fork relative to its merge point)
-  files the fork changed since the merge point : 470
-  still differing in the result                : 470
+  files the fork changed since the merge point : 467
+  still differing in the result                : 467
   ok    no fork change was silently dropped
 
 ==> Fork-only files (glitch-soc did not touch them)
-  count                      : 470
-  byte-identical to the fork : 470
+  count                      : 467
+  byte-identical to the fork : 467
   differing                  : 0
 
 ==> Result vs fork
@@ -103,7 +103,7 @@ result, the merge point is the base commit itself and the two trees are identica
   deviations (not glitch-soc-driven)    : 0
 ```
 
-`470` is the file count of the series itself (the README's "470 files changed"):
+`467` is the file count of the series itself (the README's "467 files changed"):
 because the merge point *is* the base commit, glitch-soc contributes no differences
 of its own, so every path is classified as fork-side — and all of it is
 byte-identical to `dev`. That makes this run a cheap way to prove a rebuild still

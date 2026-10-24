@@ -152,7 +152,7 @@ Redis 8.10.2 and StGit 2.6.1.
 | `setup.sh --stg` | same tree, stack `0001…0005` |
 | `lint-patches.sh` with `BASE_REPO` | all checks passed; all 5 patches apply cleanly |
 | `compare-with-fork.sh` (`--fork-ref backup-20261006`) | 464/464 fork changes preserved, 0 lost; 806 differing paths, 90 documented deviations, 0 unexplained |
-| `compare-with-fork.sh` (default, vs the rebuilt `dev`) | 470/470 preserved, 470/470 byte-identical, 0 differing paths |
+| `compare-with-fork.sh` (default, vs the rebuilt `dev`) | 467/467 preserved, 467/467 byte-identical, 0 differing paths |
 | `check-ruby-syntax.mjs` | 125 changed `.rb`/`.rake` files, 0 syntax errors |
 | JSON/YAML parse | 34 changed files, 0 invalid |
 | `yarn format:check` | 2140 files, all correctly formatted |

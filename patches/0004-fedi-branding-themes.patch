@@ -1,4 +1,4 @@
-From 386088d6a58cc9b82909e0fbdbe47c6fe6a22ecb Mon Sep 17 00:00:00 2001
+From 9f93c78ab45115c78f8bdc28d4799467a0feb8be Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:18:58 +0700
 Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
@@ -14,7 +14,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  .../api/v1/custom_emojis_controller.rb        |    1 +
  .../components/autosuggest_textarea.jsx       |    4 +-
  .../glitch/components/icon_button.tsx         |    2 +-
- .../components/status/legacy/content.jsx      |   10 +-
+ .../components/status/legacy/content.jsx      |    8 +-
  .../glitch/components/status_reactions.tsx    |  131 +
  .../glitch/components/timeline_hint.tsx       |    2 +-
  .../account_gallery/components/media_item.tsx |    2 +-
@@ -278,7 +278,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  streaming/database.js                         |   62 +-
  streaming/redis.js                            |   16 +-
  stylelint.config.js                           |   14 +
- 273 files changed, 49748 insertions(+), 113 deletions(-)
+ 273 files changed, 49747 insertions(+), 112 deletions(-)
  create mode 100644 .stylelintignore
  create mode 100644 app/javascript/flavours/glitch/components/status_reactions.tsx
  create mode 100644 app/javascript/flavours/glitch/features/explore/components/author_link.jsx
@@ -576,7 +576,7 @@ index 0000000000..6c6486457d
 @@ -0,0 +1 @@
 +app/javascript/styles/modern.scss
 diff --git a/Gemfile.lock b/Gemfile.lock
-index 0b0d572e17..657692eebc 100644
+index 14dd4af843..4ff3102464 100644
 --- a/Gemfile.lock
 +++ b/Gemfile.lock
 @@ -940,7 +940,20 @@ GEM
@@ -601,7 +601,7 @@ index 0b0d572e17..657692eebc 100644
  DEPENDENCIES
    active_model_serializers (~> 0.10)
 diff --git a/README.md b/README.md
-index 04a2bf524e..638d0d434f 100644
+index 36a08d57f1..940d098548 100644
 --- a/README.md
 +++ b/README.md
 @@ -1,13 +1,24 @@
@@ -676,18 +676,9 @@ index a3768feda4..89e334c8a7 100644
          </a>
        );
 diff --git a/app/javascript/flavours/glitch/components/status/legacy/content.jsx b/app/javascript/flavours/glitch/components/status/legacy/content.jsx
-index f1c7ec00e6..b312b5b336 100644
+index ee67780ba7..c07522a1a8 100644
 --- a/app/javascript/flavours/glitch/components/status/legacy/content.jsx
 +++ b/app/javascript/flavours/glitch/components/status/legacy/content.jsx
-@@ -24,7 +24,7 @@ const MAX_HEIGHT = 706; // 22px * 32 (+ 2px padding at the top)
- 
- /**
-  *
-- * @param {any} status
-+ * @param {import('immutable').Map<string, unknown>} status
-  * @returns {string}
-  */
- export function getStatusContent(status) {
 @@ -83,6 +83,7 @@ class StatusContent extends PureComponent {
      onCollapsedToggle: PropTypes.func,
      languages: ImmutablePropTypes.map,
@@ -1084,7 +1075,7 @@ index 4c22ebb764..867a97fdfc 100644
          'notification-group notification-group--link notification-group--admin-report focusable',
          { 'notification-group--unread': unread },
 diff --git a/app/javascript/flavours/glitch/features/status/legacy.jsx b/app/javascript/flavours/glitch/features/status/legacy.jsx
-index 1550771d73..b62523553f 100644
+index c03c50ff19..c8d0e8051a 100644
 --- a/app/javascript/flavours/glitch/features/status/legacy.jsx
 +++ b/app/javascript/flavours/glitch/features/status/legacy.jsx
 @@ -5,12 +5,14 @@ import { defineMessages, FormattedMessage } from 'react-intl';
@@ -9674,7 +9665,7 @@ index a3da581f88..9089589df3 100644
          'notification-group notification-group--link notification-group--admin-report focusable',
          { 'notification-group--unread': unread },
 diff --git a/app/javascript/mastodon/features/status/legacy.jsx b/app/javascript/mastodon/features/status/legacy.jsx
-index 30426c41f7..46a52d3ace 100644
+index dd83adfc65..dcb6589be1 100644
 --- a/app/javascript/mastodon/features/status/legacy.jsx
 +++ b/app/javascript/mastodon/features/status/legacy.jsx
 @@ -5,12 +5,14 @@ import { defineMessages, FormattedMessage } from 'react-intl';
@@ -50846,7 +50837,7 @@ index 64635eaf8e..fb70ca7c39 100644
  
    def load
 diff --git a/app/lib/feed_manager.rb b/app/lib/feed_manager.rb
-index d6a6dc01f3..3c9152d8fb 100644
+index afd15b5f2d..d03becc975 100644
 --- a/app/lib/feed_manager.rb
 +++ b/app/lib/feed_manager.rb
 @@ -5,7 +5,7 @@ class FeedManager

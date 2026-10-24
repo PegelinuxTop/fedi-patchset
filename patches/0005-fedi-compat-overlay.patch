@@ -1,4 +1,4 @@
-From aa54c5f7970a1db7cd271182b76880550f083775 Mon Sep 17 00:00:00 2001
+From 0a342bc363e306976b95e26854397ebeb577ad6c Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:28:10 +0700
 Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
@@ -6,12 +6,9 @@ Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
 
 ---
  Dockerfile                                    | 15 +++++++++++++
- .../components/scrollable_list/index.jsx      |  2 +-
  .../local_settings/navigation/item/index.jsx  |  1 +
  .../components/pill_bar_button.jsx            |  1 +
  .../features/ui/components/link_footer.tsx    |  5 +++++
- .../components/scrollable_list/index.jsx      |  2 +-
- .../components/status/legacy/content.jsx      |  2 +-
  .../features/ui/components/link_footer.tsx    |  5 +++++
  app/javascript/mastodon/locales/en.json       |  1 +
  config/locales/ja.yml                         |  6 ++++++
@@ -19,7 +16,7 @@ Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
  .../export_domain_blocks_controller_spec.rb   |  4 ++--
  spec/models/form/import_spec.rb               | 21 +++++++++++++++----
  spec/requests/cache_spec.rb                   | 11 +++++++++-
- 14 files changed, 74 insertions(+), 10 deletions(-)
+ 11 files changed, 71 insertions(+), 7 deletions(-)
 
 diff --git a/Dockerfile b/Dockerfile
 index 90c1be362f..2285467767 100644
@@ -54,19 +51,6 @@ index 90c1be362f..2285467767 100644
  
  RUN \
    ldconfig; \
-diff --git a/app/javascript/flavours/glitch/components/scrollable_list/index.jsx b/app/javascript/flavours/glitch/components/scrollable_list/index.jsx
-index 14f1ee57ab..981917bc65 100644
---- a/app/javascript/flavours/glitch/components/scrollable_list/index.jsx
-+++ b/app/javascript/flavours/glitch/components/scrollable_list/index.jsx
-@@ -27,7 +27,7 @@ const listenerOptions = supportsPassiveEvents ? { passive: true } : false;
- /**
-  *
-  * @param {import('flavours/glitch/store').RootState} state
-- * @param {*} props
-+ * @param {{ scrollKey: string }} props
-  */
- const mapStateToProps = (state, { scrollKey }) => {
-   return {
 diff --git a/app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx b/app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx
 index ad5e36b19d..ac21dae3cc 100644
 --- a/app/javascript/flavours/glitch/features/local_settings/navigation/item/index.jsx
@@ -107,32 +91,6 @@ index 93be53498a..0644f7a3b1 100644
            {context !== 'about' && (
              <li>
                <Link to='/about' target={multiColumn ? '_blank' : undefined}>
-diff --git a/app/javascript/mastodon/components/scrollable_list/index.jsx b/app/javascript/mastodon/components/scrollable_list/index.jsx
-index e44a827a2f..14a71a609b 100644
---- a/app/javascript/mastodon/components/scrollable_list/index.jsx
-+++ b/app/javascript/mastodon/components/scrollable_list/index.jsx
-@@ -27,7 +27,7 @@ const listenerOptions = supportsPassiveEvents ? { passive: true } : false;
- /**
-  *
-  * @param {import('mastodon/store').RootState} state
-- * @param {*} props
-+ * @param {{ scrollKey: string }} props
-  */
- const mapStateToProps = (state, { scrollKey }) => {
-   return {
-diff --git a/app/javascript/mastodon/components/status/legacy/content.jsx b/app/javascript/mastodon/components/status/legacy/content.jsx
-index fee34b5f78..8fa3443253 100644
---- a/app/javascript/mastodon/components/status/legacy/content.jsx
-+++ b/app/javascript/mastodon/components/status/legacy/content.jsx
-@@ -24,7 +24,7 @@ const MAX_HEIGHT = 706; // 22px * 32 (+ 2px padding at the top)
- 
- /**
-  *
-- * @param {any} status
-+ * @param {import('immutable').Map<string, unknown>} status
-  * @returns {string}
-  */
- export function getStatusContent(status) {
 diff --git a/app/javascript/mastodon/features/ui/components/link_footer.tsx b/app/javascript/mastodon/features/ui/components/link_footer.tsx
 index 65635a8f62..15284e78d1 100644
 --- a/app/javascript/mastodon/features/ui/components/link_footer.tsx
@@ -150,10 +108,10 @@ index 65635a8f62..15284e78d1 100644
              <li>
                <Link to='/about' target={multiColumn ? '_blank' : undefined}>
 diff --git a/app/javascript/mastodon/locales/en.json b/app/javascript/mastodon/locales/en.json
-index 03e885e286..1f5960d87d 100644
+index f9efde34f8..66ed2dcf41 100644
 --- a/app/javascript/mastodon/locales/en.json
 +++ b/app/javascript/mastodon/locales/en.json
-@@ -1128,6 +1128,7 @@
+@@ -1125,6 +1125,7 @@
    "notification.moderation_warning.action_suspend": "Your account has been suspended.",
    "notification.own_poll": "Your poll has ended",
    "notification.poll": "A poll you voted in has ended",
@@ -179,7 +137,7 @@ index 0f661e7ae7..36af933863 100644
          authorized_fetch: 連合サーバーによる署名なしでの情報取得を拒否する
          authorized_fetch_overridden_hint: この設定は環境変数で指定されているため、ここでは変更できません。
 diff --git a/eslint.config.mjs b/eslint.config.mjs
-index 67f7da386d..8d399c6ef2 100644
+index d913c0b5ef..7347b76389 100644
 --- a/eslint.config.mjs
 +++ b/eslint.config.mjs
 @@ -153,6 +153,7 @@ export default tseslint.config([
@@ -190,7 +148,7 @@ index 67f7da386d..8d399c6ef2 100644
      languageOptions: {
        globals: {
          ...globals.browser,
-@@ -399,4 +400,11 @@ export default tseslint.config([
+@@ -401,4 +402,11 @@ export default tseslint.config([
        '@typescript-eslint/prefer-nullish-coalescing': 'off',
      },
    },

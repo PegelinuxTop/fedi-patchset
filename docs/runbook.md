@@ -119,7 +119,7 @@ to the build tree:
 ```sh
 cd ~/Workspace/mastodon/fedi-patchset
 scripts/compare-with-fork.sh --result ~/src/fedi-rebase
-# right after a sync this is the mirror check: 0 differing paths, 470/470 preserved
+# right after a sync this is the mirror check: 0 differing paths, 467/467 preserved
 git -C ~/Workspace/mastodon/fedi.my.id rev-parse origin/dev^{tree}   # = the build tree
 ```
 

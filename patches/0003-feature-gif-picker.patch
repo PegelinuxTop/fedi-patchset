@@ -1,4 +1,4 @@
-From 62d363564e2dad6b2f693ca50455d2b75436726f Mon Sep 17 00:00:00 2001
+From a9d147643cfdb1001a94070bc4e4459870362ae9 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:17:31 +0700
 Subject: [PATCH 3/5] feature/gif-picker: Tenor/Klipy GIF search (Essem,
@@ -101,7 +101,7 @@ index 0000000000..3b19ac73f6
 +  end
 +end
 diff --git a/app/javascript/flavours/glitch/actions/compose.js b/app/javascript/flavours/glitch/actions/compose.js
-index 229895b9ce..e7a5a508a4 100644
+index b030acbd32..619ef797d5 100644
 --- a/app/javascript/flavours/glitch/actions/compose.js
 +++ b/app/javascript/flavours/glitch/actions/compose.js
 @@ -71,6 +71,11 @@ export const COMPOSE_LANGUAGE_CHANGE     = 'COMPOSE_LANGUAGE_CHANGE';
@@ -140,7 +140,7 @@ index 229895b9ce..e7a5a508a4 100644
        prependCWRe: prependCWRe,
      });
  
-@@ -378,7 +384,47 @@ export function doodleSet(options) {
+@@ -366,7 +372,47 @@ export function doodleSet(options) {
    };
  }
  
@@ -189,7 +189,7 @@ index 229895b9ce..e7a5a508a4 100644
    return function (dispatch, getState) {
      // Exit if there's a quote.
      if (getState().compose.get('quoted_status_id')) {
-@@ -413,6 +459,7 @@ export function uploadCompose(files) {
+@@ -401,6 +447,7 @@ export function uploadCompose(files) {
  
        const data = new FormData();
        data.append('file', file);
@@ -792,7 +792,7 @@ index 23dd16d93d..b63c6e6a98 100644
      const do_not_federate = !!action.status.get('local_only');
      let text = action.raw_text || unescapeHTML(expandMentions(action.status));
 diff --git a/app/javascript/flavours/glitch/styles/mastodon/components.scss b/app/javascript/flavours/glitch/styles/mastodon/components.scss
-index 9059ca6be3..a1a47c4371 100644
+index 9f018f29e0..bbf82629b4 100644
 --- a/app/javascript/flavours/glitch/styles/mastodon/components.scss
 +++ b/app/javascript/flavours/glitch/styles/mastodon/components.scss
 @@ -518,11 +518,17 @@ body > [data-popover-placement] {

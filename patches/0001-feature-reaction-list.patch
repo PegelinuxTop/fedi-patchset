@@ -1,4 +1,4 @@
-From 0959f4969a78ed1e8c8502ce433ee2a27fa5bf1d Mon Sep 17 00:00:00 2001
+From 8501d937522708813ce5c491efa23b23bfa3bd37 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:07:08 +0700
 Subject: [PATCH 1/5] feature/reaction-list: emoji reactions backend + frontend
@@ -16,7 +16,7 @@ Subject: [PATCH 1/5] feature/reaction-list: emoji reactions backend + frontend
  .../glitch/components/account/index.tsx       |  24 ++-
  .../glitch/components/avatar_overlay.tsx      |  61 ++++--
  .../status/legacy/action_bar/index.jsx        |  13 +-
- .../components/status/legacy/container.js     |  21 ++-
+ .../components/status/legacy/container.js     |  10 +
  .../components/status/legacy/prepend.jsx      |  17 ++
  .../components/status/legacy/reactions.tsx    | 131 +++++++++++++
  .../components/status/legacy/status.jsx       |  18 +-
@@ -102,7 +102,7 @@ Subject: [PATCH 1/5] feature/reaction-list: emoji reactions backend + frontend
  spec/models/status_reaction_spec.rb           |   3 +
  .../api/v1/statuses/reactions_spec.rb         | 153 +++++++++++++++
  .../api/web/push_subscriptions_spec.rb        |   1 +
- 97 files changed, 2391 insertions(+), 92 deletions(-)
+ 97 files changed, 2383 insertions(+), 89 deletions(-)
  create mode 100644 app/controllers/api/v1/statuses/reactions_controller.rb
  create mode 100644 app/javascript/flavours/glitch/api_types/reaction.ts
  create mode 100644 app/javascript/flavours/glitch/components/status/legacy/reactions.tsx
@@ -853,10 +853,10 @@ index 60a740089e..932fc72bf2 100644
                  dismissQuoteHint();
                  return true;
 diff --git a/app/javascript/flavours/glitch/components/status/legacy/container.js b/app/javascript/flavours/glitch/components/status/legacy/container.js
-index 789c11de8d..4a18434fc8 100644
+index 49a2a867b5..d6d7dfbcd2 100644
 --- a/app/javascript/flavours/glitch/components/status/legacy/container.js
 +++ b/app/javascript/flavours/glitch/components/status/legacy/container.js
-@@ -17,6 +17,8 @@ import {
+@@ -16,6 +16,8 @@ import {
    unbookmark,
    pin,
    unpin,
@@ -865,32 +865,8 @@ index 789c11de8d..4a18434fc8 100644
  } from '@/flavours/glitch/actions/interactions';
  import { openModal } from '@/flavours/glitch/actions/modal';
  import { initMuteModal } from '@/flavours/glitch/actions/mutes';
-@@ -69,16 +71,20 @@ const makeMapStateToProps = () => {
-   return mapStateToProps;
- };
- 
--const mapDispatchToProps = (dispatch, { contextType }) => ({
-+const mapDispatchToProps = (dispatch, ownProps) => ({
- 
-   onReply (status) {
-+    const getStatus = makeGetStatus();
-+
-     dispatch((_, getState) => {
-       let state = getState();
-+      const statusFromState = getStatus(state, ownProps);
-+      const rebloggedBy = statusFromState.get('reblog') ? statusFromState.get('account') : undefined;
- 
-       if (state.getIn(['local_settings', 'confirm_before_clearing_draft']) && state.getIn(['compose', 'text']).trim().length !== 0) {
--        dispatch(openModal({ modalType: 'CONFIRM_REPLY', modalProps: { status } }));
-+        dispatch(openModal({ modalType: 'CONFIRM_REPLY', modalProps: { status, rebloggedBy } }));
-       } else {
--        dispatch(replyCompose(status));
-+        dispatch(replyCompose(status, rebloggedBy));
-       }
-     });
-   },
-@@ -111,6 +117,14 @@ const mapDispatchToProps = (dispatch, { contextType }) => ({
-     }
+@@ -74,6 +76,14 @@ const mapDispatchToProps = (dispatch, { contextType }) => ({
+     dispatch(replyComposeById({ statusId: status.get('id') }));
    },
  
 +  onReactionAdd (statusId, name, url) {
@@ -901,17 +877,9 @@ index 789c11de8d..4a18434fc8 100644
 +    dispatch(removeReaction(statusId, name));
 +  },
 +
-   onEmbed (status) {
-     dispatch(openModal({
-       modalType: 'EMBED',
-@@ -197,6 +211,7 @@ const mapDispatchToProps = (dispatch, { contextType }) => ({
+   onQuote (status) {
+     dispatch(quoteComposeById(status.get('id')));
    },
- 
-   onAddFilter (status) {
-+    const { contextType } = ownProps;
-     dispatch(initAddFilter(status, { contextType }));
-   },
- 
 diff --git a/app/javascript/flavours/glitch/components/status/legacy/prepend.jsx b/app/javascript/flavours/glitch/components/status/legacy/prepend.jsx
 index 4f562d2930..8c69caee96 100644
 --- a/app/javascript/flavours/glitch/components/status/legacy/prepend.jsx
@@ -2758,10 +2726,10 @@ index f902952c61..ce3094bb4c 100644
                    when :follow, :'admin.sign_up'
                      type
 diff --git a/app/models/concerns/user/has_settings.rb b/app/models/concerns/user/has_settings.rb
-index a613e58f85..a1ddf8bff1 100644
+index 150805fc93..db4603f7df 100644
 --- a/app/models/concerns/user/has_settings.rb
 +++ b/app/models/concerns/user/has_settings.rb
-@@ -139,6 +139,10 @@ module User::HasSettings
+@@ -147,6 +147,10 @@ module User::HasSettings
      settings['hide_followers_count']
    end
  
@@ -2772,7 +2740,7 @@ index a613e58f85..a1ddf8bff1 100644
    def setting_default_quote_policy
      settings['default_quote_policy'] || 'public'
    end
-@@ -186,4 +190,14 @@ module User::HasSettings
+@@ -194,4 +198,14 @@ module User::HasSettings
    def hide_all_media?
      settings['web.display_media'] == 'hide_all'
    end
@@ -3064,7 +3032,7 @@ index 24129cf311..89a0f5c029 100644
  
    def clamp_untrusted_counts
 diff --git a/app/models/user_settings.rb b/app/models/user_settings.rb
-index b164f8071f..bdbcef0df3 100644
+index cafe533696..f98d17c2d5 100644
 --- a/app/models/user_settings.rb
 +++ b/app/models/user_settings.rb
 @@ -18,6 +18,7 @@ class UserSettings
@@ -3074,8 +3042,8 @@ index b164f8071f..bdbcef0df3 100644
 +  setting :visible_reactions, default: 6
    setting :default_quote_policy, default: 'public', in: %w(public followers nobody)
    setting :email_subscriptions, default: false
- 
-@@ -51,6 +52,7 @@ class UserSettings
+   setting :display_own_boosts, default: false
+@@ -53,6 +54,7 @@ class UserSettings
      setting :follow, default: true
      setting :reblog, default: false
      setting :favourite, default: false
@@ -3231,7 +3199,7 @@ index 0000000000..49f0c1c8fd
 +  end
 +end
 diff --git a/app/serializers/initial_state_serializer.rb b/app/serializers/initial_state_serializer.rb
-index 499bcbbf56..8e758cfbf8 100644
+index 32dde6a7b8..75632772cf 100644
 --- a/app/serializers/initial_state_serializer.rb
 +++ b/app/serializers/initial_state_serializer.rb
 @@ -7,13 +7,17 @@ class InitialStateSerializer < ActiveModel::Serializer
@@ -3270,9 +3238,9 @@ index 499bcbbf56..8e758cfbf8 100644
        store[:show_trends]       = Setting.trends && object_account_user.setting_trends
 +      store[:visible_reactions] = object_account_user.setting_visible_reactions
        store[:emoji_style]       = object_account_user.settings['web.emoji_style']
-       store[:wrapstodon]        = wrapstodon
-     else
-@@ -145,14 +150,21 @@ class InitialStateSerializer < ActiveModel::Serializer
+       store[:display_own_boosts] = object_account_user.setting_display_own_boosts
+       store[:display_own_posts] = object_account_user.setting_display_own_posts
+@@ -147,14 +152,21 @@ class InitialStateSerializer < ActiveModel::Serializer
        landing_page: Setting.landing_page,
        trends_enabled: Setting.trends,
        version: instance_presenter.version,
@@ -3702,7 +3670,7 @@ index 0000000000..fa30d708ea
 +
 +<%= render 'status', status: @status %>
 diff --git a/app/views/settings/preferences/appearance/show.html.haml b/app/views/settings/preferences/appearance/show.html.haml
-index e38886cda9..6fc1e10ed8 100644
+index a5f7785ffd..88ee83c6bb 100644
 --- a/app/views/settings/preferences/appearance/show.html.haml
 +++ b/app/views/settings/preferences/appearance/show.html.haml
 @@ -76,6 +76,9 @@
