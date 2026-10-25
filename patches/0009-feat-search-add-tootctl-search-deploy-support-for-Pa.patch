@@ -1,15 +1,15 @@
-From 66ce8d3962b327a331f08cb94c3f811eb3fada01 Mon Sep 17 00:00:00 2001
+From dd78629d27a256c29b70e566102b210b654c8d6c Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
-Date: Mon, 26 Oct 2026 03:51:24 +0700
-Subject: [PATCH 09/11] feat(search): add tootctl search deploy support for
+Date: Mon, 26 Oct 2026 06:19:33 +0700
+Subject: [PATCH 09/10] feat(search): add tootctl search deploy support for
  ParadeDB
 
 ---
- lib/mastodon/cli/search.rb | 31 ++++++++++++++++++++++++++++++-
- 1 file changed, 30 insertions(+), 1 deletion(-)
+ lib/mastodon/cli/search.rb | 37 ++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 36 insertions(+), 1 deletion(-)
 
 diff --git a/lib/mastodon/cli/search.rb b/lib/mastodon/cli/search.rb
-index 3d866b5d36..fbff9ce53d 100644
+index 3d866b5d36..f0b8d49fef 100644
 --- a/lib/mastodon/cli/search.rb
 +++ b/lib/mastodon/cli/search.rb
 @@ -16,7 +16,8 @@ module Mastodon::CLI
@@ -26,7 +26,7 @@ index 3d866b5d36..fbff9ce53d 100644
        database will be imported into the indices, unless overridden with --no-import.
      LONG_DESC
      def deploy
-+      if options[:backend] == 'paradedb' || (options[:backend] == 'auto' && Search::Backend.paradedb?)
++      if options[:backend] == 'paradedb' || (options[:backend] == 'auto' && SearchBackend.paradedb?)
 +        deploy_paradedb!
 +        return
 +      end
@@ -34,7 +34,7 @@ index 3d866b5d36..fbff9ce53d 100644
        verify_deploy_options!
  
        indices = if options[:only]
-@@ -127,6 +133,29 @@ module Mastodon::CLI
+@@ -127,6 +133,35 @@ module Mastodon::CLI
  
      private
  
@@ -55,7 +55,13 @@ index 3d866b5d36..fbff9ce53d 100644
 +
 +      if options[:clean]
 +        say('Cleaning up orphaned search documents...')
-+        StatusSearchDocument.where.not(status_id: Status.select(:id)).delete_all
++        if ENV['PARADEDB_DATABASE_URL'].present?
++          # Cross-database cleanup: fetch valid IDs in batches
++          valid_ids = Status.pluck(:id)
++          StatusSearchDocument.where.not(status_id: valid_ids).delete_all
++        else
++          StatusSearchDocument.where.not(status_id: Status.select(:id)).delete_all
++        end
 +      end
 +
 +      say('ParadeDB status search documents populated successfully!', :green)

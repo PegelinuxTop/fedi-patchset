@@ -1,0 +1,261 @@
+From 4fd71acb61514ab833a244be9332e49ef186a0d4 Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Mon, 26 Oct 2026 06:19:10 +0700
+Subject: [PATCH 06/10] feat(search): add configurable SearchBackend
+ abstraction layer
+
+---
+ .env.production.sample                      | 11 +++++
+ app/lib/search_backend.rb                   | 47 +++++++++++++++++++++
+ app/lib/search_backends/base.rb             | 21 +++++++++
+ app/lib/search_backends/database.rb         | 21 +++++++++
+ app/lib/search_backends/elasticsearch.rb    | 21 +++++++++
+ app/lib/search_backends/paradedb.rb         | 21 +++++++++
+ app/serializers/initial_state_serializer.rb |  2 +-
+ app/services/search_service.rb              |  8 ++--
+ 8 files changed, 147 insertions(+), 5 deletions(-)
+ create mode 100644 app/lib/search_backend.rb
+ create mode 100644 app/lib/search_backends/base.rb
+ create mode 100644 app/lib/search_backends/database.rb
+ create mode 100644 app/lib/search_backends/elasticsearch.rb
+ create mode 100644 app/lib/search_backends/paradedb.rb
+
+diff --git a/.env.production.sample b/.env.production.sample
+index 2a6b0568d7..ec46829c7d 100644
+--- a/.env.production.sample
++++ b/.env.production.sample
+@@ -56,6 +56,17 @@ DB_PASS=
+ DB_PORT=5432
+ 
+ 
++# Search Backend configuration
++# ----------------------------
++# Options: elasticsearch (default if ES_ENABLED=true), paradedb, database
++# SEARCH_BACKEND=paradedb
++
++# ParadeDB settings (when SEARCH_BACKEND=paradedb)
++# Optional dedicated Postgres search DB URL (defaults to primary application DB)
++# PARADEDB_DATABASE_URL=postgresql://mastodon:secret@paradedb:5432/mastodon_search
++# Enable dual-writing to both ES and ParadeDB during migration
++# SEARCH_DUAL_WRITE=false
++
+ # Elasticsearch (optional)
+ # ------------------------
+ #ES_ENABLED=true
+diff --git a/app/lib/search_backend.rb b/app/lib/search_backend.rb
+new file mode 100644
+index 0000000000..faa5e2692b
+--- /dev/null
++++ b/app/lib/search_backend.rb
+@@ -0,0 +1,47 @@
++# frozen_string_literal: true
++
++module SearchBackend
++  class << self
++    def current
++      @current ||= begin
++        backend_name = ENV.fetch('SEARCH_BACKEND') do
++          Chewy.enabled? ? 'elasticsearch' : 'database'
++        end.downcase
++
++        case backend_name
++        when 'paradedb'
++          SearchBackends::Paradedb.new
++        when 'elasticsearch', 'chewy', 'es'
++          SearchBackends::Elasticsearch.new
++        else
++          SearchBackends::Database.new
++        end
++      end
++    end
++
++    # Reset cached backend (useful in testing)
++    def reset!
++      @current = nil
++    end
++
++    def search_enabled?
++      !database? && (paradedb? || Chewy.enabled?)
++    end
++
++    def paradedb?
++      current.is_a?(SearchBackends::Paradedb)
++    end
++
++    def elasticsearch?
++      current.is_a?(SearchBackends::Elasticsearch)
++    end
++
++    def database?
++      current.is_a?(SearchBackends::Database)
++    end
++
++    def dual_write?
++      ENV['SEARCH_DUAL_WRITE'] == 'true'
++    end
++  end
++end
+diff --git a/app/lib/search_backends/base.rb b/app/lib/search_backends/base.rb
+new file mode 100644
+index 0000000000..a0c7281df5
+--- /dev/null
++++ b/app/lib/search_backends/base.rb
+@@ -0,0 +1,21 @@
++# frozen_string_literal: true
++
++module SearchBackends
++  class Base
++    def statuses_searchable?(account)
++      raise NotImplementedError
++    end
++
++    def search_statuses(query, account, options = {})
++      raise NotImplementedError
++    end
++
++    def search_accounts(query, account, options = {})
++      raise NotImplementedError
++    end
++
++    def search_tags(query, options = {})
++      raise NotImplementedError
++    end
++  end
++end
+diff --git a/app/lib/search_backends/database.rb b/app/lib/search_backends/database.rb
+new file mode 100644
+index 0000000000..eefdf76891
+--- /dev/null
++++ b/app/lib/search_backends/database.rb
+@@ -0,0 +1,21 @@
++# frozen_string_literal: true
++
++module SearchBackends
++  class Database < Base
++    def statuses_searchable?(_account)
++      false
++    end
++
++    def search_statuses(_query, _account, _options = {})
++      []
++    end
++
++    def search_accounts(query, account, options = {})
++      AccountSearchService.new.call(query, account, options)
++    end
++
++    def search_tags(query, options = {})
++      TagSearchService.new.call(query, options)
++    end
++  end
++end
+diff --git a/app/lib/search_backends/elasticsearch.rb b/app/lib/search_backends/elasticsearch.rb
+new file mode 100644
+index 0000000000..1048de31fb
+--- /dev/null
++++ b/app/lib/search_backends/elasticsearch.rb
+@@ -0,0 +1,21 @@
++# frozen_string_literal: true
++
++module SearchBackends
++  class Elasticsearch < Base
++    def statuses_searchable?(account)
++      Chewy.enabled? && account.present?
++    end
++
++    def search_statuses(query, account, options = {})
++      StatusesSearchService.new.call(query, account, options)
++    end
++
++    def search_accounts(query, account, options = {})
++      AccountSearchService.new.call(query, account, options)
++    end
++
++    def search_tags(query, options = {})
++      TagSearchService.new.call(query, options)
++    end
++  end
++end
+diff --git a/app/lib/search_backends/paradedb.rb b/app/lib/search_backends/paradedb.rb
+new file mode 100644
+index 0000000000..2f3db3e445
+--- /dev/null
++++ b/app/lib/search_backends/paradedb.rb
+@@ -0,0 +1,21 @@
++# frozen_string_literal: true
++
++module SearchBackends
++  class Paradedb < Base
++    def statuses_searchable?(account)
++      account.present?
++    end
++
++    def search_statuses(query, account, options = {})
++      StatusesParadedbSearchService.new.call(query, account, options)
++    end
++
++    def search_accounts(query, account, options = {})
++      AccountSearchService.new.call(query, account, options)
++    end
++
++    def search_tags(query, options = {})
++      TagSearchService.new.call(query, options)
++    end
++  end
++end
+diff --git a/app/serializers/initial_state_serializer.rb b/app/serializers/initial_state_serializer.rb
+index 75632772cf..a0812600d4 100644
+--- a/app/serializers/initial_state_serializer.rb
++++ b/app/serializers/initial_state_serializer.rb
+@@ -141,7 +141,7 @@ class InitialStateSerializer < ActiveModel::Serializer
+       profile_directory: Setting.profile_directory,
+       registrations_open: Setting.registrations_mode != 'none' && !Rails.configuration.x.single_user_mode,
+       repository: Mastodon::Version.repository,
+-      search_enabled: Chewy.enabled?,
++      search_enabled: SearchBackend.search_enabled?,
+       single_user_mode: Rails.configuration.x.single_user_mode,
+       source_url: instance_presenter.source_url,
+       sso_redirect: sso_redirect,
+diff --git a/app/services/search_service.rb b/app/services/search_service.rb
+index fd5a186cd3..9ec5706887 100644
+--- a/app/services/search_service.rb
++++ b/app/services/search_service.rb
+@@ -29,7 +29,7 @@ class SearchService < BaseService
+   private
+ 
+   def perform_accounts_search!
+-    AccountSearchService.new.call(
++    SearchBackend.current.search_accounts(
+       @query,
+       @account,
+       limit: @limit,
+@@ -43,7 +43,7 @@ class SearchService < BaseService
+   end
+ 
+   def perform_statuses_search!
+-    StatusesSearchService.new.call(
++    SearchBackend.current.search_statuses(
+       @query,
+       @account,
+       limit: @limit,
+@@ -55,7 +55,7 @@ class SearchService < BaseService
+   end
+ 
+   def perform_hashtags_search!
+-    TagSearchService.new.call(
++    SearchBackend.current.search_tags(
+       @query,
+       limit: @limit,
+       offset: @offset,
+@@ -84,7 +84,7 @@ class SearchService < BaseService
+   end
+ 
+   def status_searchable?
+-    Chewy.enabled? && status_search? && @account.present?
++    SearchBackend.current.statuses_searchable?(@account) && status_search?
+   end
+ 
+   def account_searchable?
+-- 
+2.56.0
+

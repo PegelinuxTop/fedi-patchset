@@ -1,7 +1,7 @@
-From 29c0e5cf5e0998cb75c8398a91cc376eab29e0b0 Mon Sep 17 00:00:00 2001
+From 0897d4d1c1a739a89230951d2c8e1cc3b85be9c0 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
-Date: Mon, 26 Oct 2026 03:51:36 +0700
-Subject: [PATCH 10/11] build(docker): update docker-compose with ParadeDB
+Date: Mon, 26 Oct 2026 06:19:41 +0700
+Subject: [PATCH 10/10] build(docker): update docker-compose with ParadeDB
  postgres image instructions
 
 ---

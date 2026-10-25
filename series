@@ -6,9 +6,8 @@
 0003-feature-gif-picker.patch
 0004-fedi-branding-themes.patch
 0005-fedi-compat-overlay.patch
-0006-feat-search-add-configurable-Search-Backend-abstract.patch
+0006-feat-search-add-configurable-SearchBackend-abstracti.patch
 0007-feat-search-add-status_search_documents-table-worker.patch
 0008-feat-search-add-ParadedbQueryTransformer-and-Statuse.patch
 0009-feat-search-add-tootctl-search-deploy-support-for-Pa.patch
 0010-build-docker-update-docker-compose-with-ParadeDB-pos.patch
-0011-feat-search-wire-PARADEDB_DATABASE_URL-to-StatusSear.patch

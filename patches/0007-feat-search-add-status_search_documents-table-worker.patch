@@ -1,25 +1,27 @@
-From f8d0e6ad5b4c540e5659264c3ad9c495b99c149a Mon Sep 17 00:00:00 2001
+From d055b3638c3d97c5b13ab4b8c9e669d89fafc9f0 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
-Date: Mon, 26 Oct 2026 03:51:08 +0700
-Subject: [PATCH 07/11] feat(search): add status_search_documents table,
+Date: Mon, 26 Oct 2026 06:19:18 +0700
+Subject: [PATCH 07/10] feat(search): add status_search_documents table,
  worker, and sync hooks for ParadeDB
 
 ---
  .../concerns/account/statuses_search.rb       | 12 +++-
  app/models/concerns/status/search_concern.rb  | 16 +++++
- app/models/status_search_document.rb          | 43 ++++++++++++
- .../search/upsert_status_document_worker.rb   | 24 +++++++
+ app/models/status_search_document.rb          | 47 +++++++++++++
+ .../upsert_status_search_document_worker.rb   | 22 ++++++
  config/sidekiq.yml                            |  1 +
  ...25210000_create_status_search_documents.rb | 67 +++++++++++++++++++
+ lib/tasks/paradedb.rake                       | 24 +++++++
  spec/models/status_search_document_spec.rb    | 29 ++++++++
- 7 files changed, 190 insertions(+), 2 deletions(-)
+ 8 files changed, 216 insertions(+), 2 deletions(-)
  create mode 100644 app/models/status_search_document.rb
- create mode 100644 app/workers/search/upsert_status_document_worker.rb
+ create mode 100644 app/workers/upsert_status_search_document_worker.rb
  create mode 100644 db/migrate/20261025210000_create_status_search_documents.rb
+ create mode 100644 lib/tasks/paradedb.rake
  create mode 100644 spec/models/status_search_document_spec.rb
 
 diff --git a/app/models/concerns/account/statuses_search.rb b/app/models/concerns/account/statuses_search.rb
-index 93452b78b0..781671d97a 100644
+index 93452b78b0..18bfa2e4a1 100644
 --- a/app/models/concerns/account/statuses_search.rb
 +++ b/app/models/concerns/account/statuses_search.rb
 @@ -17,18 +17,22 @@ module Account::StatusesSearch
@@ -27,20 +29,20 @@ index 93452b78b0..781671d97a 100644
  
    def enqueue_add_to_public_statuses_index
 -    return unless Chewy.enabled?
-+    return unless Chewy.enabled? || Search::Backend.paradedb?
++    return unless Chewy.enabled? || SearchBackend.paradedb?
  
      AddToPublicStatusesIndexWorker.perform_async(id)
    end
  
    def enqueue_remove_from_public_statuses_index
 -    return unless Chewy.enabled?
-+    return unless Chewy.enabled? || Search::Backend.paradedb?
++    return unless Chewy.enabled? || SearchBackend.paradedb?
  
      RemoveFromPublicStatusesIndexWorker.perform_async(id)
    end
  
    def add_to_public_statuses_index!
-+    if Search::Backend.paradedb? || Search::Backend.dual_write?
++    if SearchBackend.paradedb? || SearchBackend.dual_write?
 +      StatusSearchDocument.where(account_id: id).update_all(indexable: true)
 +    end
 +
@@ -51,7 +53,7 @@ index 93452b78b0..781671d97a 100644
    end
  
    def remove_from_public_statuses_index!
-+    if Search::Backend.paradedb? || Search::Backend.dual_write?
++    if SearchBackend.paradedb? || SearchBackend.dual_write?
 +      StatusSearchDocument.where(account_id: id).update_all(indexable: false)
 +    end
 +
@@ -59,7 +61,7 @@ index 93452b78b0..781671d97a 100644
  
      PublicStatusesIndex.filter(term: { account_id: id }).delete_all
 diff --git a/app/models/concerns/status/search_concern.rb b/app/models/concerns/status/search_concern.rb
-index 7f1dbedc45..268d8b038f 100644
+index 7f1dbedc45..cdba6e71e8 100644
 --- a/app/models/concerns/status/search_concern.rb
 +++ b/app/models/concerns/status/search_concern.rb
 @@ -5,6 +5,22 @@ module Status::SearchConcern
@@ -73,13 +75,13 @@ index 7f1dbedc45..268d8b038f 100644
 +  end
 +
 +  def sync_search_documents
-+    if Search::Backend.paradedb? || Search::Backend.dual_write?
-+      Search::UpsertStatusDocumentWorker.perform_async(id)
++    if SearchBackend.paradedb? || SearchBackend.dual_write?
++      UpsertStatusSearchDocumentWorker.perform_async(id)
 +    end
 +  end
 +
 +  def remove_search_document
-+    if Search::Backend.paradedb? || Search::Backend.dual_write?
++    if SearchBackend.paradedb? || SearchBackend.dual_write?
 +      StatusSearchDocument.remove_for_status_id!(id)
 +    end
    end
@@ -87,14 +89,18 @@ index 7f1dbedc45..268d8b038f 100644
    def searchable_by
 diff --git a/app/models/status_search_document.rb b/app/models/status_search_document.rb
 new file mode 100644
-index 0000000000..5ca8d8ae36
+index 0000000000..e1cc84650d
 --- /dev/null
 +++ b/app/models/status_search_document.rb
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,47 @@
 +# frozen_string_literal: true
 +
 +class StatusSearchDocument < ApplicationRecord
 +  self.primary_key = :status_id
++
++  if ENV['PARADEDB_DATABASE_URL'].present?
++    establish_connection URI.parse(ENV['PARADEDB_DATABASE_URL']).to_s
++  end
 +
 +  belongs_to :status, inverse_of: :search_document, optional: true
 +  belongs_to :account
@@ -134,34 +140,32 @@ index 0000000000..5ca8d8ae36
 +    where(status_id: status_id).delete_all
 +  end
 +end
-diff --git a/app/workers/search/upsert_status_document_worker.rb b/app/workers/search/upsert_status_document_worker.rb
+diff --git a/app/workers/upsert_status_search_document_worker.rb b/app/workers/upsert_status_search_document_worker.rb
 new file mode 100644
-index 0000000000..c4de62f6e3
+index 0000000000..10b64ea41b
 --- /dev/null
-+++ b/app/workers/search/upsert_status_document_worker.rb
-@@ -0,0 +1,24 @@
++++ b/app/workers/upsert_status_search_document_worker.rb
+@@ -0,0 +1,22 @@
 +# frozen_string_literal: true
 +
-+module Search
-+  class UpsertStatusDocumentWorker
-+    include Sidekiq::Worker
++class UpsertStatusSearchDocumentWorker
++  include Sidekiq::Worker
 +
-+    sidekiq_options queue: 'search', retry: 3
++  sidekiq_options queue: 'search', retry: 3
 +
-+    def perform(status_id)
-+      status = Status.unscoped
-+                     .includes(:account, :tags, :media_attachments, :preloadable_poll)
-+                     .find_by(id: status_id)
++  def perform(status_id)
++    status = Status.unscoped
++                   .includes(:account, :tags, :media_attachments, :preloadable_poll)
++                   .find_by(id: status_id)
 +
-+      if status.nil? || status.discarded?
-+        StatusSearchDocument.remove_for_status_id!(status_id)
-+        return
-+      end
-+
-+      StatusSearchDocument.refresh_for_status!(status)
-+    rescue ActiveRecord::RecordNotFound
++    if status.nil? || status.discarded?
 +      StatusSearchDocument.remove_for_status_id!(status_id)
++      return
 +    end
++
++    StatusSearchDocument.refresh_for_status!(status)
++  rescue ActiveRecord::RecordNotFound
++    StatusSearchDocument.remove_for_status_id!(status_id)
 +  end
 +end
 diff --git a/config/sidekiq.yml b/config/sidekiq.yml
@@ -247,6 +251,36 @@ index 0000000000..355a93c935
 +      execute 'DROP INDEX IF EXISTS index_status_search_documents_on_bm25;'
 +      drop_table :status_search_documents, if_exists: true
 +    end
++  end
++end
+diff --git a/lib/tasks/paradedb.rake b/lib/tasks/paradedb.rake
+new file mode 100644
+index 0000000000..036258438d
+--- /dev/null
++++ b/lib/tasks/paradedb.rake
+@@ -0,0 +1,24 @@
++# frozen_string_literal: true
++
++namespace :paradedb do
++  desc 'Run migrations against dedicated PARADEDB_DATABASE_URL'
++  task migrate: :environment do
++    if ENV['PARADEDB_DATABASE_URL'].blank?
++      puts 'PARADEDB_DATABASE_URL not set, running via standard db:migrate.'
++      Rake::Task['db:migrate'].invoke
++      next
++    end
++
++    puts "Migrating dedicated ParadeDB database at #{ENV['PARADEDB_DATABASE_URL']}..."
++    connection = StatusSearchDocument.connection
++
++    migration_file = Rails.root.join('db/migrate/20261025210000_create_status_search_documents.rb')
++    require migration_file
++
++    ActiveRecord::Migration.suppress_messages do
++      CreateStatusSearchDocuments.new.exec_migration(connection, :up)
++    end
++
++    puts 'ParadeDB dedicated database migration complete.'
 +  end
 +end
 diff --git a/spec/models/status_search_document_spec.rb b/spec/models/status_search_document_spec.rb

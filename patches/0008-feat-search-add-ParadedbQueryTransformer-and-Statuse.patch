@@ -1,7 +1,7 @@
-From 7e21d0a97053d6a4d97fe83d19b7f3ebd4ffc1f9 Mon Sep 17 00:00:00 2001
+From 3c97efbc166712c2086406065c576d2f4da5ea68 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
-Date: Mon, 26 Oct 2026 03:51:16 +0700
-Subject: [PATCH 08/11] feat(search): add ParadedbQueryTransformer and
+Date: Mon, 26 Oct 2026 06:19:26 +0700
+Subject: [PATCH 08/10] feat(search): add ParadedbQueryTransformer and
  StatusesParadedbSearchService
 
 ---
@@ -15,7 +15,7 @@ Subject: [PATCH 08/11] feat(search): add ParadedbQueryTransformer and
 
 diff --git a/app/lib/paradedb_query_transformer.rb b/app/lib/paradedb_query_transformer.rb
 new file mode 100644
-index 0000000000..381ef38270
+index 0000000000..c6ac528bb5
 --- /dev/null
 +++ b/app/lib/paradedb_query_transformer.rb
 @@ -0,0 +1,193 @@
@@ -109,7 +109,7 @@ index 0000000000..381ef38270
 +
 +    def bm25_supported?
 +      @bm25_supported ||= begin
-+        ActiveRecord::Base.connection.select_value("SELECT 1 FROM pg_am WHERE amname = 'bm25'").present?
++        StatusSearchDocument.connection.select_value("SELECT 1 FROM pg_am WHERE amname = 'bm25'").present?
 +      rescue
 +        false
 +      end
