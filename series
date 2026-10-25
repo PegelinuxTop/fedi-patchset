@@ -11,3 +11,4 @@
 0008-feat-search-add-ParadedbQueryTransformer-and-Statuse.patch
 0009-feat-search-add-tootctl-search-deploy-support-for-Pa.patch
 0010-build-docker-update-docker-compose-with-ParadeDB-pos.patch
+0011-feat-search-wire-PARADEDB_DATABASE_URL-to-StatusSear.patch

@@ -1,7 +1,7 @@
 From f8d0e6ad5b4c540e5659264c3ad9c495b99c149a Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 03:51:08 +0700
-Subject: [PATCH 07/10] feat(search): add status_search_documents table,
+Subject: [PATCH 07/11] feat(search): add status_search_documents table,
  worker, and sync hooks for ParadeDB
 
 ---

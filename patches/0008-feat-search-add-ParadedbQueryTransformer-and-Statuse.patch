@@ -1,7 +1,7 @@
 From 7e21d0a97053d6a4d97fe83d19b7f3ebd4ffc1f9 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 03:51:16 +0700
-Subject: [PATCH 08/10] feat(search): add ParadedbQueryTransformer and
+Subject: [PATCH 08/11] feat(search): add ParadedbQueryTransformer and
  StatusesParadedbSearchService
 
 ---

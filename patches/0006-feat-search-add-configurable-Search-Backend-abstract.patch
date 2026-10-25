@@ -1,7 +1,7 @@
 From a4701cdf08fa35a65fec1d36c40d2ee9f3929a0d Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 03:51:00 +0700
-Subject: [PATCH 06/10] feat(search): add configurable Search::Backend
+Subject: [PATCH 06/11] feat(search): add configurable Search::Backend
  abstraction layer
 
 ---

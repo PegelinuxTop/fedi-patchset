@@ -1,7 +1,7 @@
 From 66ce8d3962b327a331f08cb94c3f811eb3fada01 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 03:51:24 +0700
-Subject: [PATCH 09/10] feat(search): add tootctl search deploy support for
+Subject: [PATCH 09/11] feat(search): add tootctl search deploy support for
  ParadeDB
 
 ---
