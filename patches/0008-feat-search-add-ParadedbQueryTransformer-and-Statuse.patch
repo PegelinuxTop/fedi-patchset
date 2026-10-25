@@ -1,0 +1,312 @@
+From 7e21d0a97053d6a4d97fe83d19b7f3ebd4ffc1f9 Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Mon, 26 Oct 2026 03:51:16 +0700
+Subject: [PATCH 08/10] feat(search): add ParadedbQueryTransformer and
+ StatusesParadedbSearchService
+
+---
+ app/lib/paradedb_query_transformer.rb         | 193 ++++++++++++++++++
+ .../statuses_paradedb_search_service.rb       |  55 +++++
+ spec/lib/paradedb_query_transformer_spec.rb   |  28 +++
+ 3 files changed, 276 insertions(+)
+ create mode 100644 app/lib/paradedb_query_transformer.rb
+ create mode 100644 app/services/statuses_paradedb_search_service.rb
+ create mode 100644 spec/lib/paradedb_query_transformer_spec.rb
+
+diff --git a/app/lib/paradedb_query_transformer.rb b/app/lib/paradedb_query_transformer.rb
+new file mode 100644
+index 0000000000..381ef38270
+--- /dev/null
++++ b/app/lib/paradedb_query_transformer.rb
+@@ -0,0 +1,193 @@
++# frozen_string_literal: true
++
++class ParadedbQueryTransformer
++  SUPPORTED_PREFIXES = %w(
++    has
++    is
++    language
++    from
++    before
++    after
++    during
++    in
++  ).freeze
++
++  class Query
++    attr_reader :clauses, :options
++
++    def initialize(clauses, options = {})
++      @clauses = clauses
++      @options = options
++    end
++
++    def build_relation
++      relation = StatusSearchDocument.all
++
++      clauses_by_operator = @clauses.compact.group_by(&:operator)
++      must_clauses = clauses_by_operator.fetch(:must, [])
++      must_not_clauses = clauses_by_operator.fetch(:must_not, [])
++      filter_clauses = clauses_by_operator.fetch(:filter, [])
++      flags = clauses_by_operator.fetch(:flag, []).to_h { |c| [c.prefix, c.term] }
++
++      current_account = @options[:current_account]
++
++      case flags['in']
++      when 'library'
++        relation = current_account ? relation.searchable_by_account(current_account.id) : relation.none
++      when 'public'
++        relation = relation.public_statuses
++      else
++        if current_account
++          relation = relation.where(
++            '(visibility = ? AND indexable = true) OR (searchable_by @> ARRAY[?]::bigint[])',
++            Status.visibilities[:public],
++            current_account.id
++          )
++        else
++          relation = relation.public_statuses
++        end
++      end
++
++      # BM25 Full text search terms
++      terms = must_clauses.map(&:term).reject(&:blank?)
++      if terms.any?
++        if bm25_supported?
++          bm25_terms = terms.map { |t| escape_bm25_term(t) }.reject(&:blank?)
++          if bm25_terms.any?
++            relation = relation.where('searchable_text @@@ ?', bm25_terms.join(' AND '))
++          end
++        else
++          terms.each do |term|
++            relation = relation.where('searchable_text ILIKE ?', "%#{sanitize_sql_like(term)}%")
++          end
++        end
++      end
++
++      must_not_terms = must_not_clauses.map(&:term).reject(&:blank?)
++      if must_not_terms.any?
++        if bm25_supported?
++          bm25_not_terms = must_not_terms.map { |t| escape_bm25_term(t) }.reject(&:blank?)
++          if bm25_not_terms.any?
++            relation = relation.where('NOT (searchable_text @@@ ?)', bm25_not_terms.join(' OR '))
++          end
++        else
++          must_not_terms.each do |term|
++            relation = relation.where.not('searchable_text ILIKE ?', "%#{sanitize_sql_like(term)}%")
++          end
++        end
++      end
++
++      filter_clauses.each do |filter|
++        relation = apply_filter(relation, filter)
++      end
++
++      relation
++    end
++
++    private
++
++    def bm25_supported?
++      @bm25_supported ||= begin
++        ActiveRecord::Base.connection.select_value("SELECT 1 FROM pg_am WHERE amname = 'bm25'").present?
++      rescue
++        false
++      end
++    end
++
++    def sanitize_sql_like(string, escape_character = '\\')
++      pattern = Regexp.union(escape_character, '%', '_')
++      string.gsub(pattern) { |x| [escape_character, x].join }
++    end
++
++    def escape_bm25_term(term)
++      term.gsub(/[^a-zA-Z0-9_\-\.\#]/, ' ').strip
++    end
++
++    def apply_filter(relation, filter)
++      case filter.prefix
++      when 'from'
++        account_id = resolve_account_id(filter.term)
++        filter.negated? ? relation.where.not(account_id: account_id) : relation.where(account_id: account_id)
++      when 'language'
++        filter.negated? ? relation.where.not(language: filter.term) : relation.where(language: filter.term)
++      when 'has', 'is'
++        filter.negated? ? relation.where('NOT (? = ANY(properties))', filter.term) : relation.where('? = ANY(properties)', filter.term)
++      when 'before'
++        date = parse_date(filter.term)
++        relation.where('status_created_at < ?', date) if date
++      when 'after'
++        date = parse_date(filter.term)
++        relation.where('status_created_at > ?', date) if date
++      when 'during'
++        date = parse_date(filter.term)
++        relation.where(status_created_at: date.beginning_of_day..date.end_of_day) if date
++      else
++        relation
++      end
++    end
++
++    def resolve_account_id(term)
++      return @options[:current_account]&.id || -1 if term == 'me'
++
++      username, domain = term.gsub(/\A@/, '').split('@')
++      domain = nil if TagManager.instance.local_domain?(domain)
++      account = Account.find_remote(username, domain)
++      account&.id || -1
++    end
++
++    def parse_date(term)
++      Time.zone.parse(term) rescue nil
++    end
++  end
++
++  class Clause
++    attr_reader :operator, :prefix, :term
++
++    def initialize(operator, prefix, term, negated = false)
++      @operator = operator
++      @prefix   = prefix
++      @term     = term
++      @negated  = negated
++    end
++
++    def negated?
++      @negated
++    end
++  end
++
++  def parse(parsed_ast, current_account: nil)
++    clauses = []
++
++    if parsed_ast.is_a?(Hash) && parsed_ast[:query]
++      items = parsed_ast[:query]
++      items = [items] unless items.is_a?(Array)
++
++      items.each do |item|
++        clause_hash = item[:clause] || item
++        next unless clause_hash.is_a?(Hash)
++
++        op = clause_hash[:operator]&.to_s
++        operator = op == '-' ? :must_not : :must
++
++        if clause_hash[:prefix]
++          prefix = clause_hash[:prefix][:term].to_s.downcase
++          term = clause_hash[:phrase] ? clause_hash[:phrase].map { |t| t[:term].to_s }.join(' ') : clause_hash[:term].to_s
++
++          if prefix == 'in'
++            clauses << Clause.new(:flag, prefix, term)
++          elsif SUPPORTED_PREFIXES.include?(prefix)
++            clauses << Clause.new(:filter, prefix, term, op == '-')
++          else
++            clauses << Clause.new(operator, nil, "#{prefix} #{term}")
++          end
++        elsif clause_hash[:term]
++          clauses << Clause.new(operator, nil, clause_hash[:term].to_s)
++        elsif clause_hash[:phrase]
++          clauses << Clause.new(operator, nil, clause_hash[:phrase].map { |t| t[:term].to_s }.join(' '))
++        end
++      end
++    end
++
++    Query.new(clauses, current_account: current_account)
++  end
++end
+diff --git a/app/services/statuses_paradedb_search_service.rb b/app/services/statuses_paradedb_search_service.rb
+new file mode 100644
+index 0000000000..736014227e
+--- /dev/null
++++ b/app/services/statuses_paradedb_search_service.rb
+@@ -0,0 +1,55 @@
++# frozen_string_literal: true
++
++class StatusesParadedbSearchService < BaseService
++  def call(query, account = nil, options = {})
++    MastodonOTELTracer.in_span('StatusesParadedbSearchService#call') do |span|
++      @query   = query&.strip
++      @account = account
++      @options = options
++      @limit   = options[:limit].to_i
++      @offset  = options[:offset].to_i
++
++      span.add_attributes(
++        'search.offset' => @offset,
++        'search.limit' => @limit,
++        'search.backend' => 'paradedb'
++      )
++
++      status_search_results.tap do |results|
++        span.set_attribute('search.results.count', results.size)
++      end
++    end
++  end
++
++  private
++
++  def status_search_results
++    parsed_ast = SearchQueryParser.new.parse(@query) rescue nil
++    return [] if parsed_ast.nil?
++
++    query_builder = ParadedbQueryTransformer.new.parse(parsed_ast, current_account: @account)
++
++    doc_ids = query_builder.build_relation
++                           .order(status_id: :desc)
++                           .limit(@limit)
++                           .offset(@offset)
++                           .pluck(:status_id)
++
++    return [] if doc_ids.empty?
++
++    statuses = Status.where(id: doc_ids)
++                     .includes(:account, :media_attachments, :preloadable_poll)
++                     .index_by(&:id)
++
++    results = doc_ids.map { |id| statuses[id] }.compact
++
++    account_ids     = results.map(&:account_id)
++    account_domains = results.map(&:account_domain)
++    @account.preload_relations!(account_ids, account_domains) if @account
++
++    results.reject { |status| StatusFilter.new(status, @account).filtered? }
++  rescue => e
++    Rails.logger.warn "ParadeDB status search failed: #{e.message}"
++    []
++  end
++end
+diff --git a/spec/lib/paradedb_query_transformer_spec.rb b/spec/lib/paradedb_query_transformer_spec.rb
+new file mode 100644
+index 0000000000..c549380950
+--- /dev/null
++++ b/spec/lib/paradedb_query_transformer_spec.rb
+@@ -0,0 +1,28 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++
++describe ParadedbQueryTransformer do
++  subject { described_class.new }
++
++  let(:account) { Fabricate(:account) }
++
++  describe '#parse' do
++    it 'parses bare words into must clauses' do
++      ast = SearchQueryParser.new.parse('hello world')
++      query = subject.parse(ast, current_account: account)
++      clauses = query.clauses
++
++      expect(clauses.map(&:term)).to include('hello', 'world')
++    end
++
++    it 'parses prefix filters' do
++      ast = SearchQueryParser.new.parse('from:me has:media in:library')
++      query = subject.parse(ast, current_account: account)
++      clauses = query.clauses
++
++      prefix_clauses = clauses.select { |c| c.operator == :filter }
++      expect(prefix_clauses.map(&:prefix)).to include('from', 'has')
++    end
++  end
++end
+-- 
+2.56.0
+

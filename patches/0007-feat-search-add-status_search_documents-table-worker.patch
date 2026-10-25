@@ -1,0 +1,289 @@
+From f8d0e6ad5b4c540e5659264c3ad9c495b99c149a Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Mon, 26 Oct 2026 03:51:08 +0700
+Subject: [PATCH 07/10] feat(search): add status_search_documents table,
+ worker, and sync hooks for ParadeDB
+
+---
+ .../concerns/account/statuses_search.rb       | 12 +++-
+ app/models/concerns/status/search_concern.rb  | 16 +++++
+ app/models/status_search_document.rb          | 43 ++++++++++++
+ .../search/upsert_status_document_worker.rb   | 24 +++++++
+ config/sidekiq.yml                            |  1 +
+ ...25210000_create_status_search_documents.rb | 67 +++++++++++++++++++
+ spec/models/status_search_document_spec.rb    | 29 ++++++++
+ 7 files changed, 190 insertions(+), 2 deletions(-)
+ create mode 100644 app/models/status_search_document.rb
+ create mode 100644 app/workers/search/upsert_status_document_worker.rb
+ create mode 100644 db/migrate/20261025210000_create_status_search_documents.rb
+ create mode 100644 spec/models/status_search_document_spec.rb
+
+diff --git a/app/models/concerns/account/statuses_search.rb b/app/models/concerns/account/statuses_search.rb
+index 93452b78b0..781671d97a 100644
+--- a/app/models/concerns/account/statuses_search.rb
++++ b/app/models/concerns/account/statuses_search.rb
+@@ -17,18 +17,22 @@ module Account::StatusesSearch
+   end
+ 
+   def enqueue_add_to_public_statuses_index
+-    return unless Chewy.enabled?
++    return unless Chewy.enabled? || Search::Backend.paradedb?
+ 
+     AddToPublicStatusesIndexWorker.perform_async(id)
+   end
+ 
+   def enqueue_remove_from_public_statuses_index
+-    return unless Chewy.enabled?
++    return unless Chewy.enabled? || Search::Backend.paradedb?
+ 
+     RemoveFromPublicStatusesIndexWorker.perform_async(id)
+   end
+ 
+   def add_to_public_statuses_index!
++    if Search::Backend.paradedb? || Search::Backend.dual_write?
++      StatusSearchDocument.where(account_id: id).update_all(indexable: true)
++    end
++
+     return unless Chewy.enabled?
+ 
+     statuses.without_reblogs.public_visibility.reorder(nil).find_in_batches do |batch|
+@@ -37,6 +41,10 @@ module Account::StatusesSearch
+   end
+ 
+   def remove_from_public_statuses_index!
++    if Search::Backend.paradedb? || Search::Backend.dual_write?
++      StatusSearchDocument.where(account_id: id).update_all(indexable: false)
++    end
++
+     return unless Chewy.enabled?
+ 
+     PublicStatusesIndex.filter(term: { account_id: id }).delete_all
+diff --git a/app/models/concerns/status/search_concern.rb b/app/models/concerns/status/search_concern.rb
+index 7f1dbedc45..268d8b038f 100644
+--- a/app/models/concerns/status/search_concern.rb
++++ b/app/models/concerns/status/search_concern.rb
+@@ -5,6 +5,22 @@ module Status::SearchConcern
+ 
+   included do
+     scope :indexable, -> { without_reblogs.public_visibility.joins(:account).where(account: { indexable: true }) }
++
++    has_one :search_document, class_name: 'StatusSearchDocument', foreign_key: :status_id, inverse_of: :status, dependent: :destroy
++    after_commit :sync_search_documents, on: [:create, :update]
++    after_destroy_commit :remove_search_document
++  end
++
++  def sync_search_documents
++    if Search::Backend.paradedb? || Search::Backend.dual_write?
++      Search::UpsertStatusDocumentWorker.perform_async(id)
++    end
++  end
++
++  def remove_search_document
++    if Search::Backend.paradedb? || Search::Backend.dual_write?
++      StatusSearchDocument.remove_for_status_id!(id)
++    end
+   end
+ 
+   def searchable_by
+diff --git a/app/models/status_search_document.rb b/app/models/status_search_document.rb
+new file mode 100644
+index 0000000000..5ca8d8ae36
+--- /dev/null
++++ b/app/models/status_search_document.rb
+@@ -0,0 +1,43 @@
++# frozen_string_literal: true
++
++class StatusSearchDocument < ApplicationRecord
++  self.primary_key = :status_id
++
++  belongs_to :status, inverse_of: :search_document, optional: true
++  belongs_to :account
++
++  scope :searchable_by_account, ->(account_id) {
++    where('searchable_by @> ARRAY[?]::bigint[]', account_id)
++  }
++
++  scope :public_statuses, -> {
++    where(visibility: Status.visibilities[:public], indexable: true)
++  }
++
++  def self.refresh_for_status!(status)
++    return if status.reblog?
++
++    # If status is deleted or marked discard, remove search document
++    if status.discarded?
++      remove_for_status_id!(status.id)
++      return
++    end
++
++    doc = find_or_initialize_by(status_id: status.id)
++    doc.account_id = status.account_id
++    doc.account_domain = status.account&.domain
++    doc.searchable_text = status.searchable_text
++    doc.tags = status.tags.map(&:display_name)
++    doc.language = status.language
++    doc.visibility = Status.visibilities[status.visibility] || 0
++    doc.indexable = status.account&.indexable? || false
++    doc.properties = status.searchable_properties
++    doc.searchable_by = status.searchable_by
++    doc.status_created_at = status.created_at
++    doc.save!
++  end
++
++  def self.remove_for_status_id!(status_id)
++    where(status_id: status_id).delete_all
++  end
++end
+diff --git a/app/workers/search/upsert_status_document_worker.rb b/app/workers/search/upsert_status_document_worker.rb
+new file mode 100644
+index 0000000000..c4de62f6e3
+--- /dev/null
++++ b/app/workers/search/upsert_status_document_worker.rb
+@@ -0,0 +1,24 @@
++# frozen_string_literal: true
++
++module Search
++  class UpsertStatusDocumentWorker
++    include Sidekiq::Worker
++
++    sidekiq_options queue: 'search', retry: 3
++
++    def perform(status_id)
++      status = Status.unscoped
++                     .includes(:account, :tags, :media_attachments, :preloadable_poll)
++                     .find_by(id: status_id)
++
++      if status.nil? || status.discarded?
++        StatusSearchDocument.remove_for_status_id!(status_id)
++        return
++      end
++
++      StatusSearchDocument.refresh_for_status!(status)
++    rescue ActiveRecord::RecordNotFound
++      StatusSearchDocument.remove_for_status_id!(status_id)
++    end
++  end
++end
+diff --git a/config/sidekiq.yml b/config/sidekiq.yml
+index ae30a5c011..8f2c7fa548 100644
+--- a/config/sidekiq.yml
++++ b/config/sidekiq.yml
+@@ -4,6 +4,7 @@
+   - [default, 8]
+   - [push, 6]
+   - [ingress, 4]
++  - [search, 3]
+   - [mailers, 2]
+   - [pull]
+   - [scheduler]
+diff --git a/db/migrate/20261025210000_create_status_search_documents.rb b/db/migrate/20261025210000_create_status_search_documents.rb
+new file mode 100644
+index 0000000000..355a93c935
+--- /dev/null
++++ b/db/migrate/20261025210000_create_status_search_documents.rb
+@@ -0,0 +1,67 @@
++# frozen_string_literal: true
++
++class CreateStatusSearchDocuments < ActiveRecord::Migration[7.2]
++  disable_ddl_transaction!
++
++  def up
++    safety_assured do
++      execute <<~SQL
++        DO $$
++        BEGIN
++          CREATE EXTENSION IF NOT EXISTS pg_search;
++        EXCEPTION WHEN OTHERS THEN
++          RAISE NOTICE 'pg_search extension not available, proceeding without it';
++        END $$;
++      SQL
++
++      create_table :status_search_documents, id: false, if_not_exists: true do |t|
++        t.bigint :status_id, primary_key: true, null: false
++        t.bigint :account_id, null: false
++        t.string :account_domain
++        t.text :searchable_text, null: false, default: ''
++        t.string :tags, array: true, default: []
++        t.string :language
++        t.integer :visibility, null: false, default: 0
++        t.boolean :indexable, null: false, default: false
++        t.string :properties, array: true, default: []
++        t.bigint :searchable_by, array: true, default: []
++        t.datetime :status_created_at, null: false
++        t.timestamps
++      end
++
++      add_index :status_search_documents, :account_id, if_not_exists: true
++      add_index :status_search_documents, :searchable_by, using: 'gin', if_not_exists: true
++      add_index :status_search_documents, :tags, using: 'gin', if_not_exists: true
++      add_index :status_search_documents, :status_created_at, if_not_exists: true
++
++      execute <<~SQL
++        DO $$
++        BEGIN
++          IF EXISTS (SELECT 1 FROM pg_am WHERE amname = 'bm25') THEN
++            CREATE INDEX IF NOT EXISTS index_status_search_documents_on_bm25 ON status_search_documents
++            USING bm25 (
++              status_id,
++              searchable_text,
++              tags,
++              account_id,
++              account_domain,
++              language,
++              visibility,
++              indexable,
++              properties,
++              status_created_at,
++              searchable_by
++            ) WITH (key_field = 'status_id');
++          END IF;
++        END $$;
++      SQL
++    end
++  end
++
++  def down
++    safety_assured do
++      execute 'DROP INDEX IF EXISTS index_status_search_documents_on_bm25;'
++      drop_table :status_search_documents, if_exists: true
++    end
++  end
++end
+diff --git a/spec/models/status_search_document_spec.rb b/spec/models/status_search_document_spec.rb
+new file mode 100644
+index 0000000000..99f7fdf7f7
+--- /dev/null
++++ b/spec/models/status_search_document_spec.rb
+@@ -0,0 +1,29 @@
++# frozen_string_literal: true
++
++require 'rails_helper'
++
++describe StatusSearchDocument do
++  let(:account) { Fabricate(:account, indexable: true) }
++  let(:status)  { Fabricate(:status, account: account, text: 'Hello ParadeDB full text search') }
++
++  describe '.refresh_for_status!' do
++    it 'creates a search document for a status' do
++      expect {
++        described_class.refresh_for_status!(status)
++      }.to change(described_class, :count).by(1)
++
++      doc = described_class.find_by(status_id: status.id)
++      expect(doc.account_id).to eq(account.id)
++      expect(doc.indexable).to be true
++      expect(doc.visibility).to eq(Status.visibilities[:public])
++    end
++
++    it 'removes document if status is discarded' do
++      described_class.refresh_for_status!(status)
++      status.discard!
++
++      described_class.refresh_for_status!(status)
++      expect(described_class.find_by(status_id: status.id)).to be_nil
++    end
++  end
++end
+-- 
+2.56.0
+

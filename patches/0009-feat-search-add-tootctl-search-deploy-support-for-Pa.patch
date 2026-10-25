@@ -1,0 +1,69 @@
+From 66ce8d3962b327a331f08cb94c3f811eb3fada01 Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Mon, 26 Oct 2026 03:51:24 +0700
+Subject: [PATCH 09/10] feat(search): add tootctl search deploy support for
+ ParadeDB
+
+---
+ lib/mastodon/cli/search.rb | 31 ++++++++++++++++++++++++++++++-
+ 1 file changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/lib/mastodon/cli/search.rb b/lib/mastodon/cli/search.rb
+index 3d866b5d36..fbff9ce53d 100644
+--- a/lib/mastodon/cli/search.rb
++++ b/lib/mastodon/cli/search.rb
+@@ -16,7 +16,8 @@ module Mastodon::CLI
+ 
+     option :concurrency, type: :numeric, default: 5, aliases: [:c], desc: 'Workload will be split between this number of threads'
+     option :batch_size, type: :numeric, default: 100, aliases: [:b], desc: 'Number of records in each batch'
+-    option :only, type: :array, enum: %w(instances accounts tags statuses public_statuses), desc: 'Only process these indices'
++    option :only, type: :array, enum: %w(instances accounts tags statuses public_statuses status_search_documents), desc: 'Only process these indices'
++    option :backend, type: :string, default: 'auto', desc: 'Search backend (elasticsearch or paradedb)'
+     option :import, type: :boolean, default: true, desc: 'Import data from the database to the index'
+     option :clean, type: :boolean, default: true, desc: 'Remove outdated documents from the index'
+     option :reset_chewy, type: :boolean, default: false, desc: "Reset Chewy's internal index"
+@@ -33,6 +34,11 @@ module Mastodon::CLI
+       database will be imported into the indices, unless overridden with --no-import.
+     LONG_DESC
+     def deploy
++      if options[:backend] == 'paradedb' || (options[:backend] == 'auto' && Search::Backend.paradedb?)
++        deploy_paradedb!
++        return
++      end
++
+       verify_deploy_options!
+ 
+       indices = if options[:only]
+@@ -127,6 +133,29 @@ module Mastodon::CLI
+ 
+     private
+ 
++    def deploy_paradedb!
++      say('Populating status_search_documents for ParadeDB...')
++      scope = Status.unscoped.kept.without_reblogs
++      progress = create_progress_bar(scope.count)
++
++      scope.includes(:account, :tags, :media_attachments, :preloadable_poll)
++           .find_in_batches(batch_size: options[:batch_size]) do |batch|
++        batch.each do |status|
++          StatusSearchDocument.refresh_for_status!(status)
++          progress.increment
++        rescue => e
++          warn("Failed to index status #{status.id}: #{e.message}")
++        end
++      end
++
++      if options[:clean]
++        say('Cleaning up orphaned search documents...')
++        StatusSearchDocument.where.not(status_id: Status.select(:id)).delete_all
++      end
++
++      say('ParadeDB status search documents populated successfully!', :green)
++    end
++
+     def verify_deploy_options!
+       verify_deploy_concurrency!
+       verify_deploy_batch_size!
+-- 
+2.56.0
+

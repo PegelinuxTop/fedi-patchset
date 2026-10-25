@@ -1,0 +1,30 @@
+From 29c0e5cf5e0998cb75c8398a91cc376eab29e0b0 Mon Sep 17 00:00:00 2001
+From: Rezha Julio <contact@rezhajulio.id>
+Date: Mon, 26 Oct 2026 03:51:36 +0700
+Subject: [PATCH 10/10] build(docker): update docker-compose with ParadeDB
+ postgres image instructions
+
+---
+ docker-compose.yml | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 50d71d1353..8c33d12d53 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -4,7 +4,12 @@
+ services:
+   db:
+     restart: always
++    # Standard PostgreSQL 14 (default):
+     image: postgres:14-alpine
++    # For ParadeDB (pg_search BM25 engine), uncomment below and follow upgrade guide:
++    # image: paradedb/paradedb:0.26.2
++    # volumes:
++    #   - ./postgres-paradedb:/var/lib/postgresql/data
+     shm_size: 256mb
+     networks:
+       - internal_network
+-- 
+2.56.0
+
