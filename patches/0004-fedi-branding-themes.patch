@@ -1,4 +1,4 @@
-From 9f93c78ab45115c78f8bdc28d4799467a0feb8be Mon Sep 17 00:00:00 2001
+From 3458b15c75197b9a5b2f3e2f4261daf96756933b Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:18:58 +0700
 Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
@@ -104,7 +104,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  .../styles/mastodon-yozakura/theme/index.scss |   48 +
  .../glitch/styles/mastodon/glitch/doodle.scss |    2 +
  .../glitch/styles/modern-glitch-fixes.scss    |  137 +
- .../glitch/styles/modern-urusai-fixes.scss    |  107 +
+ .../glitch/styles/modern-urusai-fixes.scss    |  132 +
  .../flavours/glitch/styles/modern.scss        | 3401 ++++++
  .../flavours/glitch/styles/urusai-fixes.scss  |   10 +
  app/javascript/icons/favicon-16x16.png        |  Bin 588 -> 526 bytes
@@ -216,7 +216,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  .../mastodon-sakura-modern/theme/index.scss   |   48 +
  app/javascript/styles/mastodon/admin.scss     |    6 +
  app/javascript/styles/mastodon/rtl.scss       |    1 -
- .../styles/modern-urusai-fixes.scss           |  102 +
+ .../styles/modern-urusai-fixes.scss           |  127 +
  app/javascript/styles/modern.scss             | 2977 +++++
  app/javascript/styles/tangerineui-cherry.scss |    4 +
  .../styles/tangerineui-cherry/diff.scss       |   29 +
@@ -278,7 +278,7 @@ Subject: [PATCH 4/5] fedi/branding-themes: sign-in banner, footers, custom
  streaming/database.js                         |   62 +-
  streaming/redis.js                            |   16 +-
  stylelint.config.js                           |   14 +
- 273 files changed, 49747 insertions(+), 112 deletions(-)
+ 273 files changed, 49797 insertions(+), 112 deletions(-)
  create mode 100644 .stylelintignore
  create mode 100644 app/javascript/flavours/glitch/components/status_reactions.tsx
  create mode 100644 app/javascript/flavours/glitch/features/explore/components/author_link.jsx
@@ -5780,10 +5780,10 @@ index 0000000000..fa3107d2ba
 +}
 diff --git a/app/javascript/flavours/glitch/styles/modern-urusai-fixes.scss b/app/javascript/flavours/glitch/styles/modern-urusai-fixes.scss
 new file mode 100644
-index 0000000000..c6b126e519
+index 0000000000..aff9519aab
 --- /dev/null
 +++ b/app/javascript/flavours/glitch/styles/modern-urusai-fixes.scss
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,132 @@
 +@use 'sass:color';
 +
 +.layout-multiple-columns
@@ -5866,6 +5866,31 @@ index 0000000000..c6b126e519
 +      height: unset !important;
 +      width: unset !important;
 +    }
++  }
++
++  li:has(
++    a.navigation-panel__compose-button[href='/publish'],
++    a.column-link--transparent[href='/home'],
++    a.column-link--transparent[href='/notifications'],
++    a.column-link--transparent[href='/explore']
++  ) {
++    display: none;
++  }
++
++  li:has(a.column-link--transparent) {
++    flex: 1;
++  }
++
++  a.column-link--transparent {
++    justify-content: center;
++  }
++
++  a.column-link--transparent[href='/about'] {
++    padding: 0 10px !important;
++  }
++
++  button.column-link--transparent {
++    gap: 3px;
 +  }
 +}
 +
@@ -18180,10 +18205,10 @@ index a78f95f66d..435ea8482c 100644
    }
 diff --git a/app/javascript/styles/modern-urusai-fixes.scss b/app/javascript/styles/modern-urusai-fixes.scss
 new file mode 100644
-index 0000000000..23e72d3fd5
+index 0000000000..cbd0fd92c8
 --- /dev/null
 +++ b/app/javascript/styles/modern-urusai-fixes.scss
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,127 @@
 +@use 'sass:color';
 +
 +.layout-multiple-columns
@@ -18261,6 +18286,31 @@ index 0000000000..23e72d3fd5
 +      height: unset !important;
 +      width: unset !important;
 +    }
++  }
++
++  li:has(
++    a.navigation-panel__compose-button[href='/publish'],
++    a.column-link--transparent[href='/home'],
++    a.column-link--transparent[href='/notifications'],
++    a.column-link--transparent[href='/explore']
++  ) {
++    display: none;
++  }
++
++  li:has(a.column-link--transparent) {
++    flex: 1;
++  }
++
++  a.column-link--transparent {
++    justify-content: center;
++  }
++
++  a.column-link--transparent[href='/about'] {
++    padding: 0 10px !important;
++  }
++
++  button.column-link--transparent {
++    gap: 3px;
 +  }
 +}
 +

@@ -6,7 +6,7 @@ from a stack of five patches.
 
 - **Base commit**: `.base-commit` — glitch-soc `main`
   `a0f9055f2578052755598b774bd7690d54bb55a7` (2026-10-08)
-- **Result**: 5 patches, 467 files changed, +54561 / −310 against that commit
+- **Result**: 5 patches, 467 files changed, +54611 / −310 against that commit
 - **Licence**: AGPL-3.0, like glitch-soc and Mastodon — see [LICENSE](LICENSE)
 
 ## Why this exists
