@@ -1,4 +1,4 @@
-From d055b3638c3d97c5b13ab4b8c9e669d89fafc9f0 Mon Sep 17 00:00:00 2001
+From a84e14c4243dee0830a535f136fb773a4eea6fa5 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 06:19:18 +0700
 Subject: [PATCH 07/10] feat(search): add status_search_documents table,
@@ -318,6 +318,3 @@ index 0000000000..99f7fdf7f7
 +    end
 +  end
 +end
--- 
-2.56.0
-

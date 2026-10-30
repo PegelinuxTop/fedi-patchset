@@ -1,4 +1,4 @@
-From 4fd71acb61514ab833a244be9332e49ef186a0d4 Mon Sep 17 00:00:00 2001
+From ad359f57db10794640d7ae3343635a95cbf1afa4 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 06:19:10 +0700
 Subject: [PATCH 06/10] feat(search): add configurable SearchBackend
@@ -256,6 +256,3 @@ index fd5a186cd3..9ec5706887 100644
    end
  
    def account_searchable?
--- 
-2.56.0
-

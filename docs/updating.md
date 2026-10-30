@@ -1,8 +1,8 @@
 # Updating to a newer glitch-soc
 
 The series is pinned to the commit in `.base-commit`. Picking up a newer
-glitch-soc means replaying the five patches on top of a new commit and
-re-exporting them.
+glitch-soc means replaying the patches listed in `series` on top of a new commit
+and re-exporting them.
 
 ## 0. Have a build checkout
 

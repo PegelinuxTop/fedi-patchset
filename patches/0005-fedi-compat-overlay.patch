@@ -1,7 +1,7 @@
-From e28da65ceacf737e4977ee9bd9cb35bd1607f769 Mon Sep 17 00:00:00 2001
+From 57477469c01039cc332e64b0b8c14fa9a17b564a Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:28:10 +0700
-Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
+Subject: [PATCH 05/10] fedi/compat-overlay: upstream-churned files re-applied
  (Elk footer, lint/drag fixes, Dockerfile qrtool, locales, sw-locales rename)
 
 ---
@@ -19,7 +19,7 @@ Subject: [PATCH 5/5] fedi/compat-overlay: upstream-churned files re-applied
  11 files changed, 71 insertions(+), 7 deletions(-)
 
 diff --git a/Dockerfile b/Dockerfile
-index 90c1be362f..2285467767 100644
+index 7f74c49778..42d80f22d1 100644
 --- a/Dockerfile
 +++ b/Dockerfile
 @@ -370,6 +370,19 @@ RUN \

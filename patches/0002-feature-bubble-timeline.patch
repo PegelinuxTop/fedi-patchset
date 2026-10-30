@@ -1,7 +1,7 @@
-From b5ea5e561baf8c22a0e6e8de47950e7a08e41abb Mon Sep 17 00:00:00 2001
+From 37c2a0f0cc5a82dbf623d48c65b7f88b1c3db353 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:07:48 +0700
-Subject: [PATCH 2/5] feature/bubble-timeline: bubble domains, timeline +
+Subject: [PATCH 02/10] feature/bubble-timeline: bubble domains, timeline +
  settings (Essem, rebased onto latest glitch-soc)
 
 ---

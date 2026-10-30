@@ -2,11 +2,11 @@
 
 Build the [fedi.my.id](https://github.com/PegelinuxTop/fedi.my.id) Mastodon fork
 on top of a current [glitch-soc](https://github.com/glitch-soc/mastodon) checkout,
-from a stack of five patches.
+from a stack of ten patches.
 
 - **Base commit**: `.base-commit` — glitch-soc `main`
-  `a0f9055f2578052755598b774bd7690d54bb55a7` (2026-10-08)
-- **Result**: 5 patches, 467 files changed, +54611 / −310 against that commit
+  `c0c4f3228e47f2c4529983b01123917f03803b4f` (2026-10-29, v5.0.0-alpha.2)
+- **Result**: 10 patches, 486 files changed, +55291 / −318 against that commit
 - **Licence**: AGPL-3.0, like glitch-soc and Mastodon — see [LICENSE](LICENSE)
 
 ## Why this exists

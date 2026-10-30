@@ -1,8 +1,8 @@
-From b579c8f4dd85202f5a086da371b4974592dbfe3a Mon Sep 17 00:00:00 2001
+From f07aac7c7c724e68ec80c1118a3ec468d9cbc6c4 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:07:08 +0700
-Subject: [PATCH 1/5] feature/reaction-list: emoji reactions backend + frontend
- (Essem, rebased onto latest glitch-soc)
+Subject: [PATCH 01/10] feature/reaction-list: emoji reactions backend +
+ frontend (Essem, rebased onto latest glitch-soc)
 
 ---
  .env.production.sample                        |   3 +

@@ -1,4 +1,4 @@
-From dd78629d27a256c29b70e566102b210b654c8d6c Mon Sep 17 00:00:00 2001
+From dfaaeb5c2e97ab1cc07f3350b9c6f3591cd89d6b Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 06:19:33 +0700
 Subject: [PATCH 09/10] feat(search): add tootctl search deploy support for
@@ -70,6 +70,3 @@ index 3d866b5d36..f0b8d49fef 100644
      def verify_deploy_options!
        verify_deploy_concurrency!
        verify_deploy_batch_size!
--- 
-2.56.0
-
