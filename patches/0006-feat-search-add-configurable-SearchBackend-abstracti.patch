@@ -1,4 +1,4 @@
-From ad359f57db10794640d7ae3343635a95cbf1afa4 Mon Sep 17 00:00:00 2001
+From 052ef6c51f2679d8babe57ee0efaa8a05d4f6442 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 06:19:10 +0700
 Subject: [PATCH 06/10] feat(search): add configurable SearchBackend

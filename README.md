@@ -5,7 +5,7 @@ on top of a current [glitch-soc](https://github.com/glitch-soc/mastodon) checkou
 from a stack of ten patches.
 
 - **Base commit**: `.base-commit` — glitch-soc `main`
-  `c0c4f3228e47f2c4529983b01123917f03803b4f` (2026-10-29, v5.0.0-alpha.2)
+  `29468cc4c6427395eb99218706542b1a89e43720` (2026-11-03, v4.7.5)
 - **Result**: 10 patches, 486 files changed, +55291 / −318 against that commit
 - **Licence**: AGPL-3.0, like glitch-soc and Mastodon — see [LICENSE](LICENSE)
 

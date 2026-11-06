@@ -1,4 +1,4 @@
-From a387525200ca7780d88e5215b55975e271be97d9 Mon Sep 17 00:00:00 2001
+From da21f6b161e97f4594831b369931e6615fc2b930 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:18:58 +0700
 Subject: [PATCH 04/10] fedi/branding-themes: sign-in banner, footers, custom
@@ -576,7 +576,7 @@ index 0000000000..6c6486457d
 @@ -0,0 +1 @@
 +app/javascript/styles/modern.scss
 diff --git a/Gemfile.lock b/Gemfile.lock
-index cfb973913e..6788ac8b84 100644
+index 39b59cb13e..fda65b8474 100644
 --- a/Gemfile.lock
 +++ b/Gemfile.lock
 @@ -940,7 +940,20 @@ GEM
