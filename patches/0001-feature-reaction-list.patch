@@ -1,4 +1,4 @@
-From da73ef13a800f4a5c80d867c64f4914ecade2f63 Mon Sep 17 00:00:00 2001
+From 8129157f00167c93c2aec72f31a86cdbb009d923 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:07:08 +0700
 Subject: [PATCH 01/10] feature/reaction-list: emoji reactions backend +
@@ -269,7 +269,7 @@ index 0000000000..c8da7fceaf
 +  end
 +end
 diff --git a/app/helpers/context_helper.rb b/app/helpers/context_helper.rb
-index 6499da7240..e6ba07e3c3 100644
+index 4f878b1dda..1e39b85289 100644
 --- a/app/helpers/context_helper.rb
 +++ b/app/helpers/context_helper.rb
 @@ -16,6 +16,7 @@ module ContextHelper

@@ -1,4 +1,4 @@
-From 3a9074e068702f3746339049503bfb78a5e91c9b Mon Sep 17 00:00:00 2001
+From 4186ed128394cb129883a9d1bfbfcb0ec494b1af Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Tue, 6 Oct 2026 01:28:10 +0700
 Subject: [PATCH 05/10] fedi/compat-overlay: upstream-churned files re-applied
@@ -19,7 +19,7 @@ Subject: [PATCH 05/10] fedi/compat-overlay: upstream-churned files re-applied
  11 files changed, 71 insertions(+), 7 deletions(-)
 
 diff --git a/Dockerfile b/Dockerfile
-index 7f74c49778..42d80f22d1 100644
+index 87a200e07e..259dcd7d6f 100644
 --- a/Dockerfile
 +++ b/Dockerfile
 @@ -370,6 +370,19 @@ RUN \
