@@ -1,4 +1,4 @@
-From 0b28f31f341d01b8ec8f00abdfa84092c16858f5 Mon Sep 17 00:00:00 2001
+From 43c15ced0e9aa89b30fc99a8b71ecc3e3cc78fa8 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 06:19:41 +0700
 Subject: [PATCH 10/10] build(docker): update docker-compose with ParadeDB
@@ -9,7 +9,7 @@ Subject: [PATCH 10/10] build(docker): update docker-compose with ParadeDB
  1 file changed, 5 insertions(+)
 
 diff --git a/docker-compose.yml b/docker-compose.yml
-index 0723e9e40c..e9d3d5d236 100644
+index d1e303e3ab..37475e2c3b 100644
 --- a/docker-compose.yml
 +++ b/docker-compose.yml
 @@ -4,7 +4,12 @@

@@ -1,4 +1,4 @@
-From 1cda092d5bce9b0fed70359eedbf56931961822c Mon Sep 17 00:00:00 2001
+From ab009348a8ff81fd9d091e4438e34638cf1b4551 Mon Sep 17 00:00:00 2001
 From: Rezha Julio <contact@rezhajulio.id>
 Date: Mon, 26 Oct 2026 06:19:33 +0700
 Subject: [PATCH 09/10] feat(search): add tootctl search deploy support for
